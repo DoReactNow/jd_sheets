@@ -6,9 +6,9 @@ describe("test safety guards", () => {
     expect(() =>
       assertTestDatabaseUrl("postgresql://u:p@127.0.0.1:47322/jdsheets_test"),
     ).not.toThrow();
-    expect(() =>
-      assertTestDatabaseUrl("postgresql://u:p@127.0.0.1:47322/jdsheets_dev"),
-    ).toThrow(/refusing to run/i);
+    expect(() => assertTestDatabaseUrl("postgresql://u:p@127.0.0.1:47322/jdsheets_dev")).toThrow(
+      /refusing to run/i,
+    );
     expect(() =>
       assertTestDatabaseUrl("postgresql://u:p@127.0.0.1:47322/jdsheets_test_copy"),
     ).toThrow(/refusing to run/i);

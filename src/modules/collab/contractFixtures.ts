@@ -45,7 +45,8 @@ export async function buildTokenFixtures(): Promise<TokenFixtures> {
   const leeway = APP_CONFIG.collab.tokenLeewaySeconds;
   const claims = base();
   const sign = (c: Record<string, unknown>, secret = FIXTURE_SECRET) => signClaims(c, secret);
-  const { sid: _dropped, ...withoutSid } = claims;
+  const withoutSid: Record<string, unknown> = { ...claims };
+  delete withoutSid.sid;
 
   const cases: TokenCase[] = [
     { name: "valid", token: await sign({ ...claims }), connectionIp: "203.0.113.7", expect: "ok" },

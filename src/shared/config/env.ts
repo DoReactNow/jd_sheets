@@ -15,9 +15,7 @@ const onOff = (name: string) =>
   z.enum(["on", "off"], { error: `${name} must be on or off` }).default("off");
 
 const secret = (name: string) =>
-  z
-    .string({ error: `${name} is required` })
-    .min(32, `${name} must be at least 32 characters`);
+  z.string({ error: `${name} is required` }).min(32, `${name} must be at least 32 characters`);
 
 const baseSchema = z.object({
   APP_ENV: z.enum(["development", "test", "production"], {
@@ -57,9 +55,9 @@ const baseSchema = z.object({
   STORAGE_S3_ACCESS_KEY_ID: z.string().min(1).optional(),
   STORAGE_S3_SECRET_ACCESS_KEY: z.string().min(1).optional(),
   STORAGE_S3_FORCE_PATH_STYLE: z.enum(["true", "false"]).optional(),
-  MAIL_DRIVER: z.enum(["fake", "smtp"], { error: "MAIL_DRIVER must be fake or smtp" }).default(
-    "fake",
-  ),
+  MAIL_DRIVER: z
+    .enum(["fake", "smtp"], { error: "MAIL_DRIVER must be fake or smtp" })
+    .default("fake"),
 });
 
 const S3_REQUIRED = [

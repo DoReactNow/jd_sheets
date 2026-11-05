@@ -6,10 +6,7 @@ import { AppError } from "@/shared/errors/AppError";
 import { ERROR_CATALOG } from "@/shared/errors/errorCatalog";
 import { callRoute } from "@/tests/setup/callRoute";
 import type { Principal } from "@/shared/rbac/principal";
-import {
-  configureWorkbookRoleResolver,
-  type WorkbookRole,
-} from "@/shared/rbac/workbookAccess";
+import { configureWorkbookRoleResolver, type WorkbookRole } from "@/shared/rbac/workbookAccess";
 
 const TOKEN = "test-only-internal-token-0123456789abcdef";
 const WORKBOOK = "0190f1e2-0000-7000-8000-000000000001";
@@ -107,13 +104,20 @@ describe("route() envelope and errors", () => {
     expect(ok.body).toEqual({ data: "Asha" });
     const bad = await callRoute(handler, { method: "POST", path: "/api/x", body: { name: "" } });
     expect(bad.body).toMatchObject({
-      error: { code: "VALIDATION_FAILED", fieldErrors: [{ field: "name", message: "Enter a name." }] },
+      error: {
+        code: "VALIDATION_FAILED",
+        fieldErrors: [{ field: "name", message: "Enter a name." }],
+      },
     });
   });
 
   it("rejects malformed JSON as VALIDATION_FAILED (P0-ERR-03)", async () => {
     const route = await load();
-    const handler = route({ access: "public", input: z.object({}), handler: async () => ({ data: 1 }) });
+    const handler = route({
+      access: "public",
+      input: z.object({}),
+      handler: async () => ({ data: 1 }),
+    });
     const response = await handler(
       new Request("http://127.0.0.1/api/x", { method: "POST", body: "{not json" }),
       { params: Promise.resolve({}) },
@@ -124,7 +128,11 @@ describe("route() envelope and errors", () => {
   it("refuses a body over the JSON limit (X-INPUT-09)", async () => {
     const route = await load();
     const { MAX_JSON_BODY_BYTES } = await import("../route");
-    const handler = route({ access: "public", input: z.object({}), handler: async () => ({ data: 1 }) });
+    const handler = route({
+      access: "public",
+      input: z.object({}),
+      handler: async () => ({ data: 1 }),
+    });
     const response = await handler(
       new Request("http://127.0.0.1/api/x", {
         method: "POST",

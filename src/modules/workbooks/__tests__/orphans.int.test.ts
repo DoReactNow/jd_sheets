@@ -4,7 +4,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { getEnv } from "@/shared/config/env";
 import { getPrisma } from "@/shared/db/prisma";
 import { getFileStorage, workbookVersionKey } from "@/shared/storage";
-import { createTestClock } from "@/shared/time";
+import { createTestClock, parseInstant } from "@/shared/time";
 import { createWorkbookValidator, minimalXlsx } from "@/shared/validator";
 import { testPrincipal } from "@/tests/setup/principals";
 import { resetDatabase } from "@/tests/setup/resetDatabase";
@@ -24,7 +24,7 @@ const service = createWorkbooksService({
 const owner = testPrincipal("MEMBER");
 
 const ageFile = (key: string, isoTime: string) => {
-  const when = new Date(isoTime);
+  const when = parseInstant(isoTime);
   utimesSync(`${getEnv().STORAGE_LOCAL_DIR}/${key}`, when, when);
 };
 

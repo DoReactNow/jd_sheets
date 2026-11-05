@@ -12,7 +12,11 @@ async function failure(response: Response): Promise<AppError> {
   if (code === "WORKBOOK_TOO_LARGE" || code === "WORKBOOK_UNREADABLE") return new AppError(code);
   if (response.status === 413) return new AppError("WORKBOOK_TOO_LARGE");
   return new AppError("SERVICE_UNAVAILABLE", {
-    logContext: { service: "collab", status: response.status, code: isErrorCode(code) ? code : null },
+    logContext: {
+      service: "collab",
+      status: response.status,
+      code: isErrorCode(code) ? code : null,
+    },
   });
 }
 
@@ -20,7 +24,8 @@ export function createCollabValidator(): WorkbookValidator {
   return {
     driver: "collab",
     async validate(bytes) {
-      if (bytes.byteLength > APP_CONFIG.workbooks.maxBytes) throw new AppError("WORKBOOK_TOO_LARGE");
+      if (bytes.byteLength > APP_CONFIG.workbooks.maxBytes)
+        throw new AppError("WORKBOOK_TOO_LARGE");
       const response = await collabRequest("/internal/workbooks/validate", {
         method: "POST",
         body: new Uint8Array(bytes),

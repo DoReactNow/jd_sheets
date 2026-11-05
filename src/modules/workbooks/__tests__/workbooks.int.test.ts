@@ -89,7 +89,7 @@ describe("creating workbooks (P0-WB-01, P0-WB-09)", () => {
   });
 
   it("keeps any script, emoji and quotes, and stores HTML-looking titles as text (X-INPUT-04/05)", async () => {
-    for (const title of ["चाय का हिसाब 📊", "Asha's \"plan\"", "<script>alert(1)</script>"]) {
+    for (const title of ["चाय का हिसाब 📊", 'Asha\'s "plan"', "<script>alert(1)</script>"]) {
       expect((await create(title)).title).toBe(title);
     }
   });
@@ -107,7 +107,9 @@ describe("creating workbooks (P0-WB-01, P0-WB-09)", () => {
       body: { title },
     });
     expect(result.status).toBe(400);
-    expect(result.body).toMatchObject({ error: { code: "VALIDATION_FAILED", fieldErrors: [{ field: "title" }] } });
+    expect(result.body).toMatchObject({
+      error: { code: "VALIDATION_FAILED", fieldErrors: [{ field: "title" }] },
+    });
     expect(await getPrisma().workbook.count()).toBe(0);
   });
 
@@ -124,7 +126,9 @@ describe("creating workbooks (P0-WB-01, P0-WB-09)", () => {
 
   it("refuses a signed-out caller (X-ACCESS-01)", async () => {
     actAs(null);
-    expect((await callRoute(createRoute, { method: "POST", path: "/api/workbooks", body: {} })).status).toBe(401);
+    expect(
+      (await callRoute(createRoute, { method: "POST", path: "/api/workbooks", body: {} })).status,
+    ).toBe(401);
     expect((await callRoute(listRoute, { path: "/api/workbooks" })).status).toBe(401);
   });
 });
@@ -190,7 +194,9 @@ describe("saving (P0-WB-04..08, P0-WB-11, P0-WB-12)", () => {
     const after = await content(wb.id);
     expect(after.headers.get("etag")).toBe(`"${result.body.data.versionId}"`);
     expect(Buffer.from(await after.arrayBuffer()).equals(Buffer.from(bytes))).toBe(true);
-    const row = await getPrisma().workbookVersion.findUnique({ where: { id: result.body.data.versionId } });
+    const row = await getPrisma().workbookVersion.findUnique({
+      where: { id: result.body.data.versionId },
+    });
     expect(row).toMatchObject({ source: "SAVE", number: 2, createdById: asha.userId });
   });
 
@@ -206,7 +212,9 @@ describe("saving (P0-WB-04..08, P0-WB-11, P0-WB-12)", () => {
     );
     expect(response.status).toBe(200);
     const body = await response.json();
-    const row = await getPrisma().workbookVersion.findUnique({ where: { id: body.data.versionId } });
+    const row = await getPrisma().workbookVersion.findUnique({
+      where: { id: body.data.versionId },
+    });
     expect(row?.source).toBe("AUTOSAVE");
   });
 
@@ -241,7 +249,11 @@ describe("saving (P0-WB-04..08, P0-WB-11, P0-WB-12)", () => {
 
   it("refuses an unreadable file; no version is written", async () => {
     const wb = await create("Bad file");
-    const result = await save(wb.id, new TextEncoder().encode("not a workbook"), `"${wb.currentVersionId}"`);
+    const result = await save(
+      wb.id,
+      new TextEncoder().encode("not a workbook"),
+      `"${wb.currentVersionId}"`,
+    );
     expect(result.status).toBe(422);
     expect(result.body).toMatchObject({ error: { code: "WORKBOOK_UNREADABLE" } });
     expect(await getPrisma().workbookVersion.count({ where: { workbookId: wb.id } })).toBe(1);

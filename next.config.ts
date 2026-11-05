@@ -20,6 +20,9 @@ const nextConfig: NextConfig = {
   // Production image runs .next/standalone/server.js (W-015).
   output: "standalone",
   poweredByHeader: false,
+  // This folder is the project root (a package-lock.json higher up must not be picked).
+  turbopack: { root: path.resolve(".") },
+  outputFileTracingRoot: path.resolve("."),
   async headers() {
     return [
       { source: "/((?!editor/).*)", headers: STATIC_SECURITY_HEADERS },
@@ -27,7 +30,10 @@ const nextConfig: NextConfig = {
         source: "/editor/:path*",
         headers: [
           ...EDITOR_SECURITY_HEADERS,
-          { key: "Content-Security-Policy", value: editorContentSecurityPolicy(editorScriptHashes()) },
+          {
+            key: "Content-Security-Policy",
+            value: editorContentSecurityPolicy(editorScriptHashes()),
+          },
         ],
       },
       {
@@ -38,7 +44,10 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     // /editor/ serves the built editor's index.html (Next.js does not map folders to index files).
-    return [{ source: "/editor", destination: "/editor/index.html" }, { source: "/editor/", destination: "/editor/index.html" }];
+    return [
+      { source: "/editor", destination: "/editor/index.html" },
+      { source: "/editor/", destination: "/editor/index.html" },
+    ];
   },
 };
 

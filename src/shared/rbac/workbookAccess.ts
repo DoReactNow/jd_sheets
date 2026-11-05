@@ -7,7 +7,14 @@ import type { Principal } from "./principal";
 export const WORKBOOK_ROLES = ["OWNER", "EDITOR", "COMMENTER", "VIEWER"] as const;
 export type WorkbookRole = (typeof WORKBOOK_ROLES)[number];
 
-export const WORKBOOK_CAPABILITIES = ["read", "comment", "edit", "history", "share", "own"] as const;
+export const WORKBOOK_CAPABILITIES = [
+  "read",
+  "comment",
+  "edit",
+  "history",
+  "share",
+  "own",
+] as const;
 export type WorkbookCapability = (typeof WORKBOOK_CAPABILITIES)[number];
 
 const MATRIX: Record<WorkbookRole, ReadonlySet<WorkbookCapability>> = {

@@ -24,7 +24,11 @@ export function WorkbookList() {
 
   const load = useCallback(async () => {
     const result = await apiRequest<WorkbookDto[]>("/api/workbooks");
-    setState(result.ok ? { kind: "ready", workbooks: result.data } : { kind: "error", error: result.error });
+    setState(
+      result.ok
+        ? { kind: "ready", workbooks: result.data }
+        : { kind: "error", error: result.error },
+    );
   }, []);
 
   useEffect(() => {
@@ -54,7 +58,12 @@ export function WorkbookList() {
         <h1 id="workbooks-heading" className={styles.heading}>
           Your workbooks
         </h1>
-        <button type="button" className="btn btn-primary" onClick={createWorkbook} disabled={creating}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={createWorkbook}
+          disabled={creating}
+        >
           {creating ? "Creating…" : "New workbook"}
         </button>
       </div>
@@ -75,7 +84,12 @@ export function WorkbookList() {
         <div className={`${styles.panel} ${styles.empty}`}>
           <p className={styles.emptyTitle}>No workbooks yet</p>
           <p className={styles.muted}>Create your first workbook to get started.</p>
-          <button type="button" className="btn btn-primary" onClick={createWorkbook} disabled={creating}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={createWorkbook}
+            disabled={creating}
+          >
             Create your first workbook
           </button>
         </div>
@@ -103,7 +117,9 @@ export function WorkbookList() {
                     </Link>
                   </td>
                   <td className={styles.muted}>{formatChanged(workbook.updatedAt)}</td>
-                  <td className={`${styles.muted} ${styles.num}`}>{formatSize(workbook.sizeBytes)}</td>
+                  <td className={`${styles.muted} ${styles.num}`}>
+                    {formatSize(workbook.sizeBytes)}
+                  </td>
                 </tr>
               ))}
             </tbody>

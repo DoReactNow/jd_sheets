@@ -3,7 +3,15 @@
 // Unchanged files keep their timestamps in .build/gridcraft, so rebuilds stay incremental.
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { applyPatches, PatchError } from "./lib/editorBuild.mjs";
@@ -24,7 +32,10 @@ execFileSync("node", [path.join(ROOT, "scripts/check-vendor-clean.mjs")], { stdi
 // 2. Committed files of the pinned commit, into a scratch folder, then patched.
 const scratch = mkdtempSync(path.join(tmpdir(), "jd-gridcraft-"));
 try {
-  execFileSync("sh", ["-c", `git -C "${vendor}" archive --format=tar HEAD | tar -x -C "${scratch}"`]);
+  execFileSync("sh", [
+    "-c",
+    `git -C "${vendor}" archive --format=tar HEAD | tar -x -C "${scratch}"`,
+  ]);
   let patches;
   try {
     patches = applyPatches(scratch, patchDir);
@@ -42,18 +53,14 @@ try {
 
   // 4. trunk build with the pinned toolchain; relative URLs so it works under /editor/.
   rmSync(out, { recursive: true, force: true });
-  const result = spawnSync(
-    "trunk",
-    ["build", "--release", "--dist", out, "--public-url", "./"],
-    {
-      cwd: path.join(source, "apps/gridcraft-web"),
-      stdio: "inherit",
-      env: rustEnv({
-        RUSTUP_TOOLCHAIN: pinnedToolchain(),
-        CARGO_TARGET_DIR: path.join(buildRoot, "target"),
-      }),
-    },
-  );
+  const result = spawnSync("trunk", ["build", "--release", "--dist", out, "--public-url", "./"], {
+    cwd: path.join(source, "apps/gridcraft-web"),
+    stdio: "inherit",
+    env: rustEnv({
+      RUSTUP_TOOLCHAIN: pinnedToolchain(),
+      CARGO_TARGET_DIR: path.join(buildRoot, "target"),
+    }),
+  });
   if (result.status !== 0) {
     console.error("editor build failed: trunk build did not succeed");
     process.exit(result.status ?? 1);

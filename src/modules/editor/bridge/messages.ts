@@ -29,7 +29,10 @@ function field(data: object, key: string): unknown {
  * Reads a message from the editor. Anything malformed, unknown or too large is null and ignored
  * (P0-BRIDGE-07). The editor's own error text is never kept (it is never shown to users).
  */
-export function parseIncoming(data: unknown, maxBytes = APP_CONFIG.editor.maxMessageBytes): IncomingMessage | null {
+export function parseIncoming(
+  data: unknown,
+  maxBytes = APP_CONFIG.editor.maxMessageBytes,
+): IncomingMessage | null {
   if (!data || typeof data !== "object") return null;
   const type = field(data, "type");
   switch (type) {
@@ -59,7 +62,10 @@ export function parseIncoming(data: unknown, maxBytes = APP_CONFIG.editor.maxMes
 }
 
 /** The message that opens a workbook in the editor. The buffer is transferred, not copied. */
-export function openMessage(name: string, bytes: ArrayBuffer): { type: string; name: string; bytes: ArrayBuffer } {
+export function openMessage(
+  name: string,
+  bytes: ArrayBuffer,
+): { type: string; name: string; bytes: ArrayBuffer } {
   return { type: MESSAGE.open, name, bytes };
 }
 

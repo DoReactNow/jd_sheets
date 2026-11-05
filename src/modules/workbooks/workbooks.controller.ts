@@ -5,9 +5,12 @@ import { AppError } from "@/shared/errors/AppError";
 import { parseInput } from "@/shared/errors/toErrorResponse";
 import { attachmentDisposition, readBodyLimited } from "@/shared/http/body";
 import type { HandlerResult, RawResult, RouteContext } from "@/shared/http/route";
-import { ifMatchSchema, type CreateWorkbookInput } from "./workbooks.schemas";
+import { createWorkbookInput, ifMatchSchema, type CreateWorkbookInput } from "./workbooks.schemas";
 import { workbooksService } from "./workbooks.instance";
 import type { SavedVersionDto, WorkbookDto } from "./workbooks.types";
+
+/** Input schemas the routes declare (routes import only the controller, rule 2). */
+export const workbookSchemas = { create: createWorkbookInput };
 
 type Ctx<I = undefined> = RouteContext<I, { id: string }>;
 
@@ -18,7 +21,9 @@ function principalOf<I, P>(context: RouteContext<I, P>) {
 
 export const workbooksController = {
   /** GET /api/workbooks */
-  async list(context: RouteContext<undefined, Record<string, string>>): Promise<HandlerResult<WorkbookDto[]>> {
+  async list(
+    context: RouteContext<undefined, Record<string, string>>,
+  ): Promise<HandlerResult<WorkbookDto[]>> {
     return { data: await workbooksService().list(principalOf(context)) };
   },
 
@@ -26,7 +31,10 @@ export const workbooksController = {
   async create(
     context: RouteContext<CreateWorkbookInput, Record<string, string>>,
   ): Promise<HandlerResult<WorkbookDto>> {
-    return { status: 201, data: await workbooksService().create(principalOf(context), context.input) };
+    return {
+      status: 201,
+      data: await workbooksService().create(principalOf(context), context.input),
+    };
   },
 
   /** GET /api/workbooks/:id */

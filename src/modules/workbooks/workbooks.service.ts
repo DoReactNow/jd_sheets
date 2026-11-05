@@ -85,12 +85,22 @@ export function createWorkbooksService(deps: WorkbooksServiceDeps) {
     /** A new workbook from GridCraft's blank workbook; the caller owns it. */
     async create(principal: Principal, input: CreateWorkbookInput): Promise<WorkbookDto> {
       const blank = await validator.blank();
-      return createWith(principal, input.title ?? APP_CONFIG.workbooks.defaultTitle, blank, "CREATE");
+      return createWith(
+        principal,
+        input.title ?? APP_CONFIG.workbooks.defaultTitle,
+        blank,
+        "CREATE",
+      );
     },
 
     /** A new workbook from an existing .xlsx (validated first). Used by seeds; Phase 2 import. */
-    async createFromBytes(principal: Principal, title: string, bytes: Uint8Array): Promise<WorkbookDto> {
-      if (bytes.byteLength > APP_CONFIG.workbooks.maxBytes) throw new AppError("WORKBOOK_TOO_LARGE");
+    async createFromBytes(
+      principal: Principal,
+      title: string,
+      bytes: Uint8Array,
+    ): Promise<WorkbookDto> {
+      if (bytes.byteLength > APP_CONFIG.workbooks.maxBytes)
+        throw new AppError("WORKBOOK_TOO_LARGE");
       await validator.validate(bytes);
       return createWith(principal, title, bytes, "IMPORT");
     },
@@ -142,7 +152,8 @@ export function createWorkbooksService(deps: WorkbooksServiceDeps) {
       bytes: Uint8Array,
       source: SaveSource,
     ): Promise<SavedVersionDto> {
-      if (bytes.byteLength > APP_CONFIG.workbooks.maxBytes) throw new AppError("WORKBOOK_TOO_LARGE");
+      if (bytes.byteLength > APP_CONFIG.workbooks.maxBytes)
+        throw new AppError("WORKBOOK_TOO_LARGE");
       const current = await repository.findById(workbookId);
       if (!current?.currentVersion) throw new AppError("NOT_FOUND");
       // Cheap early answer; the transaction below is what really decides.

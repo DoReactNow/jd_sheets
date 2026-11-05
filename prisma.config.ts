@@ -9,7 +9,6 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    // eslint-disable-next-line no-restricted-properties
     url: process.env.DATABASE_URL ?? "",
   },
 });

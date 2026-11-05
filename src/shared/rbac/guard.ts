@@ -42,7 +42,8 @@ export function checkAccess(
   context: AccessContext = {},
 ): AccessDecision {
   if (access === "public") return "allow";
-  if (access === "internal") return context.internalAuthorized === true ? "allow" : "unauthenticated";
+  if (access === "internal")
+    return context.internalAuthorized === true ? "allow" : "unauthenticated";
   if (access === "authenticated") return principal ? "allow" : "unauthenticated";
 
   const codes = requiredPermissions(access);

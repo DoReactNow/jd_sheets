@@ -1,6 +1,11 @@
 // project_data.md Section 5.5: exactly what each workbook role may do.
 import { describe, expect, it } from "vitest";
-import { highestRole, roleAllows, WORKBOOK_CAPABILITIES, type WorkbookRole } from "../workbookAccess";
+import {
+  highestRole,
+  roleAllows,
+  WORKBOOK_CAPABILITIES,
+  type WorkbookRole,
+} from "../workbookAccess";
 
 const EXPECTED: Record<WorkbookRole, string[]> = {
   OWNER: ["read", "comment", "edit", "history", "share", "own"],

@@ -39,10 +39,13 @@ export function findGuardProblems(files: string[]): string[] {
       problems.push(`${name}: re-exports a handler; declare it with route() in this file`);
     if (exported.length === 0 && !reExports) problems.push(`${name}: exports no handler`);
     for (const [, method, rest] of exported) {
-      if (!/^\s*=\s*route(<[^>]*>)?\(\{/.test(rest)) problems.push(`${name}: ${method} does not use route()`);
+      if (!/^\s*=\s*route(<[^>]*>)?\(\{/.test(rest))
+        problems.push(`${name}: ${method} does not use route()`);
     }
     const accesses = [
-      ...source.matchAll(/access:\s*("public"|'public'|"authenticated"|'authenticated'|"internal"|'internal'|\{)/g),
+      ...source.matchAll(
+        /access:\s*("public"|'public'|"authenticated"|'authenticated'|"internal"|'internal'|\{)/g,
+      ),
     ];
     if (accesses.length < exported.length)
       problems.push(`${name}: a handler does not declare access`);

@@ -63,7 +63,10 @@ const COMMON_HEADERS = [
 ];
 
 /** Every response except the editor files: nobody may frame us. */
-export const STATIC_SECURITY_HEADERS = [...COMMON_HEADERS, { key: "X-Frame-Options", value: "DENY" }];
+export const STATIC_SECURITY_HEADERS = [
+  ...COMMON_HEADERS,
+  { key: "X-Frame-Options", value: "DENY" },
+];
 
 /** The editor files: only our own pages may frame them. */
 export const EDITOR_SECURITY_HEADERS = [

@@ -3,10 +3,7 @@
 // also regenerates them in memory and fails if the committed files are stale.
 import { writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import {
-  appConfigContract,
-  buildTokenFixtures,
-} from "../src/modules/collab/contractFixtures";
+import { appConfigContract, buildTokenFixtures } from "../src/modules/collab/contractFixtures";
 import { CLIENT_IP_CASES, RUST_ERROR_CODES } from "../src/modules/collab/contractCases";
 
 const root = path.resolve(__dirname, "..", "contracts");

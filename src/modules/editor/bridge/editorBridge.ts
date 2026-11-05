@@ -32,8 +32,7 @@ export interface LoadedWorkbook {
 }
 
 export type SaveOutcome =
-  | { ok: true; versionId: string }
-  | { ok: false; conflict: boolean; message: string };
+  { ok: true; versionId: string } | { ok: false; conflict: boolean; message: string };
 
 export interface BridgeDeps {
   /** The window the editor's messages arrive at (the page's own window). */
@@ -85,7 +84,9 @@ export function createEditorBridge(deps: BridgeDeps): EditorBridge {
     }
     const { workbook } = result;
     set({ baseVersionId: workbook.versionId });
-    deps.editor()?.postMessage(openMessage(workbook.name, workbook.bytes), deps.origin, [workbook.bytes]);
+    deps
+      .editor()
+      ?.postMessage(openMessage(workbook.name, workbook.bytes), deps.origin, [workbook.bytes]);
     set({ status: "saved", message: null });
   }
 
@@ -139,7 +140,8 @@ export function createEditorBridge(deps: BridgeDeps): EditorBridge {
         break;
       case "dirty":
         dirty = message.dirty;
-        if (state.status === "saved" || state.status === "unsaved") set({ status: settledStatus() });
+        if (state.status === "saved" || state.status === "unsaved")
+          set({ status: settledStatus() });
         break;
       case "save":
         onSave(message.name, message.bytes);

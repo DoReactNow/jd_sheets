@@ -47,7 +47,9 @@ export const workbooksRepository = {
     version: NewVersion;
   }): Promise<WorkbookRow> {
     return getPrisma().$transaction(async (tx) => {
-      await tx.workbook.create({ data: { id: input.id, title: input.title, ownerId: input.ownerId } });
+      await tx.workbook.create({
+        data: { id: input.id, title: input.title, ownerId: input.ownerId },
+      });
       await tx.workbookVersion.create({
         data: { ...input.version, workbookId: input.id, number: 1 },
       });

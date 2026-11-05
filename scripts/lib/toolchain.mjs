@@ -36,6 +36,7 @@ export function pinnedGridcraft() {
       .filter((line) => line.includes("="))
       .map((line) => line.split("=").map((part) => part.trim())),
   );
-  if (!values.tag || !values.commit) throw new Error("vendor/GRIDCRAFT_VERSION needs tag= and commit=");
+  if (!values.tag || !values.commit)
+    throw new Error("vendor/GRIDCRAFT_VERSION needs tag= and commit=");
   return { tag: values.tag, commit: values.commit };
 }

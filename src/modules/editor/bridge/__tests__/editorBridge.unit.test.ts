@@ -1,7 +1,12 @@
 // P0-BRIDGE-01..09 with a scripted fake editor window (no browser needed).
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
-import { createEditorBridge, type BridgeDeps, type BridgeState, type SaveOutcome } from "../editorBridge";
+import {
+  createEditorBridge,
+  type BridgeDeps,
+  type BridgeState,
+  type SaveOutcome,
+} from "../editorBridge";
 import { MESSAGE, parseIncoming } from "../messages";
 
 const ORIGIN = "http://127.0.0.1:47320";
@@ -70,10 +75,15 @@ describe("opening (P0-BRIDGE-01)", () => {
   });
 
   it("shows a friendly message when the workbook cannot be loaded", async () => {
-    const t = setup({ load: async () => ({ ok: false, message: "We couldn't find what you were looking for." }) });
+    const t = setup({
+      load: async () => ({ ok: false, message: "We couldn't find what you were looking for." }),
+    });
     t.send({ type: MESSAGE.ready });
     await t.flush();
-    expect(t.bridge.state()).toMatchObject({ status: "load-failed", message: expect.stringContaining("couldn't") });
+    expect(t.bridge.state()).toMatchObject({
+      status: "load-failed",
+      message: expect.stringContaining("couldn't"),
+    });
     expect(t.editor.postMessage).not.toHaveBeenCalled();
   });
 });
@@ -95,9 +105,15 @@ describe("who is heard (P0-BRIDGE-02, P0-BRIDGE-07)", () => {
     expect(parseIncoming({ type: MESSAGE.dirty, dirty: "yes" })).toBeNull();
     expect(parseIncoming({ type: MESSAGE.save, name: "a.xlsx", bytes: "not bytes" })).toBeNull();
     expect(parseIncoming({ type: MESSAGE.save, name: "", bytes: bytes(1) })).toBeNull();
-    expect(parseIncoming({ type: MESSAGE.save, name: "a.xlsx", bytes: new ArrayBuffer(0) })).toBeNull();
-    expect(parseIncoming({ type: MESSAGE.save, name: "a.xlsx", bytes: bytes(1, 2, 3) }, 2)).toBeNull();
-    expect(parseIncoming({ type: MESSAGE.save, name: "x".repeat(400), bytes: bytes(1) })).toBeNull();
+    expect(
+      parseIncoming({ type: MESSAGE.save, name: "a.xlsx", bytes: new ArrayBuffer(0) }),
+    ).toBeNull();
+    expect(
+      parseIncoming({ type: MESSAGE.save, name: "a.xlsx", bytes: bytes(1, 2, 3) }, 2),
+    ).toBeNull();
+    expect(
+      parseIncoming({ type: MESSAGE.save, name: "x".repeat(400), bytes: bytes(1) }),
+    ).toBeNull();
   });
 
   it("reads every message in the shared contract file", () => {

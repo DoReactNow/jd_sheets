@@ -16,7 +16,9 @@ try {
   problems.push("vendor/gridcraft is missing: run `git submodule update --init --recursive`");
 }
 if (head && head !== commit) {
-  problems.push(`vendor/gridcraft is at ${head}, but vendor/GRIDCRAFT_VERSION pins ${tag} (${commit})`);
+  problems.push(
+    `vendor/gridcraft is at ${head}, but vendor/GRIDCRAFT_VERSION pins ${tag} (${commit})`,
+  );
 }
 if (head) {
   const status = git("status", "--porcelain", "--untracked-files=all");

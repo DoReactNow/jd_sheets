@@ -4,6 +4,7 @@
 // the bridge. Saving: GridCraft's Save (Ctrl/Cmd+S or File › Save) hands the workbook to us and
 // we store it as a new version.
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiRequest } from "@/shared/api/client";
 import { toFriendlyError, type FriendlyError } from "@/shared/api/friendlyError";
@@ -33,7 +34,11 @@ const STATUS_TEXT: Record<BridgeState["status"], string> = {
   "editor-failed": "Couldn't start",
 };
 
-async function putWorkbook(id: string, bytes: Uint8Array, baseVersionId: string): Promise<SaveOutcome> {
+async function putWorkbook(
+  id: string,
+  bytes: Uint8Array,
+  baseVersionId: string,
+): Promise<SaveOutcome> {
   try {
     const response = await fetch(`/api/workbooks/${id}/content`, {
       method: "PUT",
@@ -62,11 +67,16 @@ function downloadFile(name: string, bytes: Uint8Array) {
 }
 
 export function EditorHost({ workbookId }: { workbookId: string }) {
+  const router = useRouter();
   const frame = useRef<HTMLIFrameElement>(null);
   const [info, setInfo] = useState<WorkbookInfo | null>(null);
   const [author, setAuthor] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<FriendlyError | null>(null);
-  const [state, setState] = useState<BridgeState>({ status: "loading", baseVersionId: null, message: null });
+  const [state, setState] = useState<BridgeState>({
+    status: "loading",
+    baseVersionId: null,
+    message: null,
+  });
   const [copying, setCopying] = useState(false);
   const bridgeRef = useRef<ReturnType<typeof createEditorBridge> | null>(null);
 
@@ -94,14 +104,22 @@ export function EditorHost({ workbookId }: { workbookId: string }) {
       origin: window.location.origin,
       load: async () => {
         try {
-          const response = await fetch(`/api/workbooks/${info.id}/content`, { credentials: "same-origin" });
+          const response = await fetch(`/api/workbooks/${info.id}/content`, {
+            credentials: "same-origin",
+          });
           if (!response.ok) {
             const body: unknown = await response.json().catch(() => undefined);
-            return { ok: false, message: toFriendlyError({ status: response.status, body }).message };
+            return {
+              ok: false,
+              message: toFriendlyError({ status: response.status, body }).message,
+            };
           }
           const versionId = (response.headers.get("etag") ?? "").replace(/"/g, "");
           const bytes = await response.arrayBuffer();
-          return { ok: true, workbook: { name: `${info.title}.${APP_CONFIG.workbooks.extension}`, bytes, versionId } };
+          return {
+            ok: true,
+            workbook: { name: `${info.title}.${APP_CONFIG.workbooks.extension}`, bytes, versionId },
+          };
         } catch {
           return { ok: false, message: toFriendlyError({ networkError: true }).message };
         }
@@ -139,7 +157,7 @@ export function EditorHost({ workbookId }: { workbookId: string }) {
     if (created.ok) {
       const saved = await putWorkbook(created.data.id, bytes, created.data.currentVersionId);
       if (saved.ok) {
-        window.location.assign(`/w/${created.data.id}`);
+        router.push(`/w/${created.data.id}`);
         return;
       }
     }
@@ -196,7 +214,11 @@ export function EditorHost({ workbookId }: { workbookId: string }) {
 
       {failed ? (
         <main className="message-page">
-          <h1>{state.status === "editor-failed" ? "The editor couldn't start" : "Couldn't open this workbook"}</h1>
+          <h1>
+            {state.status === "editor-failed"
+              ? "The editor couldn't start"
+              : "Couldn't open this workbook"}
+          </h1>
           <p>
             {state.message ??
               "Your browser may not support the editor. Try an up-to-date Chrome, Edge, Firefox or Safari."}

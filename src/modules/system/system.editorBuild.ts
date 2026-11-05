@@ -10,10 +10,17 @@ const buildInfoSchema = z.object({
 });
 
 export async function readEditorBuild(
-  file = path.join(process.cwd(), "public/editor/build-info.json"),
+  file = path.join(
+    /* turbopackIgnore: true */ process.cwd(),
+    "public",
+    "editor",
+    "build-info.json",
+  ),
 ): Promise<EditorBuild | null> {
   try {
-    const info = buildInfoSchema.parse(JSON.parse(await readFile(file, "utf8")));
+    const info = buildInfoSchema.parse(
+      JSON.parse(await readFile(/* turbopackIgnore: true */ file, "utf8")),
+    );
     return {
       gridcraftTag: info.gridcraft.tag,
       gridcraftCommit: info.gridcraft.commit,

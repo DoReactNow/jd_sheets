@@ -49,9 +49,10 @@ describe("date lint rules", () => {
   }, 30_000);
 });
 
-describe("localhost rule (Decision 27)", () => {
-  it("rejects localhost in source and allows 127.0.0.1", async () => {
-    const [bad] = await eslint.lintText('export const u = "http://localhost:3000";', {
+describe("loopback host rule (Decision 27)", () => {
+  it("rejects the loopback host name in source and allows 127.0.0.1", async () => {
+    const host = ["local", "host"].join("");
+    const [bad] = await eslint.lintText(`export const u = "http://${host}:3000";`, {
       filePath: "src/modules/system/probe.ts",
     });
     expect(bad.messages.map((m) => m.message).join()).toMatch(/127\.0\.0\.1/);

@@ -13,7 +13,9 @@ export function stubEnvFor(appEnv: StubAppEnv, overrides: Record<string, string>
     }`,
     COLLAB_URL: "http://127.0.0.1:47331",
     COLLAB_TOKEN_SECRET: production ? "a".repeat(48) : "test-only-collab-secret-0123456789abcdef",
-    INTERNAL_SERVICE_TOKEN: production ? "b".repeat(48) : "test-only-internal-token-0123456789abcdef",
+    INTERNAL_SERVICE_TOKEN: production
+      ? "b".repeat(48)
+      : "test-only-internal-token-0123456789abcdef",
     WORKBOOK_VALIDATOR: production ? "collab" : "fake",
     STORAGE_DRIVER: "local",
     STORAGE_LOCAL_DIR: "./storage/test",

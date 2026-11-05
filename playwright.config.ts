@@ -1,38 +1,51 @@
-// E2E runs a real browser against the BUILT app (`npm run build` first), served with
-// .env.test on APP_PORT (47215). Only the critical journeys in Decision 29 live in e2e/.
+// E2E runs a real browser against the BUILT app (`npm run build` and `npm run editor:build` first),
+// served with .env.test, plus the real Rust service (release build). Only the critical journeys of
+// Decision 24 live in e2e/. Phase 0 has no sign-in, so the app runs with the development principal.
 import { defineConfig, devices } from "@playwright/test";
 import { config } from "dotenv";
 
 config({ path: ".env.test", override: true, quiet: true });
 
 const baseURL = process.env.APP_URL;
-if (!baseURL || !process.env.APP_PORT) {
-  throw new Error(
-    "E2E needs .env.test with APP_URL and APP_PORT: copy .env.test.example to .env.test",
-  );
+const collabURL = process.env.COLLAB_URL;
+if (!baseURL || !collabURL) {
+  throw new Error("E2E needs .env.test with APP_URL and COLLAB_URL: copy .env.test.example");
 }
 const isCI = Boolean(process.env.CI);
 
 export default defineConfig({
   testDir: "e2e",
-  globalSetup: "./e2e/support/startWorker.ts",
   testMatch: "**/*.e2e.ts",
   fullyParallel: false,
   forbidOnly: isCI,
-  retries: isCI ? 2 : 0,
+  retries: isCI ? 1 : 0,
   workers: 1,
+  timeout: 90_000,
   reporter: isCI ? [["list"], ["html", { open: "never" }]] : "list",
   use: {
     baseURL,
-    trace: "on-first-retry",
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: {
-    // `next start` on the existing build; with output: "standalone" Next prints a warning
-    // but serves normally (choice recorded in current_state.md, W-008).
-    command: "npm run start:test",
-    url: baseURL,
-    reuseExistingServer: !isCI,
-    timeout: 120_000,
-  },
+  projects: [
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
+    },
+  ],
+  webServer: [
+    {
+      command: "npm run collab:test-start",
+      url: `${collabURL}/health`,
+      reuseExistingServer: !isCI,
+      timeout: 600_000,
+    },
+    {
+      command: "npm run start:test",
+      url: `${baseURL}/api/health`,
+      reuseExistingServer: !isCI,
+      timeout: 120_000,
+      env: { DEV_PRINCIPAL: "on", WORKBOOK_VALIDATOR: "collab" },
+    },
+  ],
 });

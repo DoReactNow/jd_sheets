@@ -11,7 +11,8 @@ export function createFakeValidator(): WorkbookValidator {
   return {
     driver: "fake",
     async validate(bytes) {
-      if (bytes.byteLength > APP_CONFIG.workbooks.maxBytes) throw new AppError("WORKBOOK_TOO_LARGE");
+      if (bytes.byteLength > APP_CONFIG.workbooks.maxBytes)
+        throw new AppError("WORKBOOK_TOO_LARGE");
       const names = zipEntryNames(bytes);
       if (!names || !REQUIRED_PARTS.every((part) => names.includes(part))) {
         throw new AppError("WORKBOOK_UNREADABLE");

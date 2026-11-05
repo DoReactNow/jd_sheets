@@ -22,7 +22,9 @@ export function runValidatorContract(name: string, validator: () => WorkbookVali
     it("makes a blank workbook that it then accepts", async () => {
       const blank = await validator().blank();
       expect(Buffer.from(blank.subarray(0, 2)).toString()).toBe("PK");
-      await expect(validator().validate(blank)).resolves.toMatchObject({ sheets: expect.any(Array) });
+      await expect(validator().validate(blank)).resolves.toMatchObject({
+        sheets: expect.any(Array),
+      });
     });
 
     it("refuses a file that is not a ZIP (P0-VAL-02)", async () => {
@@ -33,14 +35,18 @@ export function runValidatorContract(name: string, validator: () => WorkbookVali
 
     it("refuses a ZIP that is not a workbook (P0-VAL-03)", async () => {
       const zip = writeZip({ "readme.txt": "just a zip" });
-      await expect(validator().validate(zip)).rejects.toMatchObject({ code: "WORKBOOK_UNREADABLE" });
+      await expect(validator().validate(zip)).rejects.toMatchObject({
+        code: "WORKBOOK_UNREADABLE",
+      });
     });
 
     it("refuses a truncated workbook (P0-VAL-04)", async () => {
       const bytes = golden("formulas");
-      await expect(validator().validate(bytes.subarray(0, bytes.length / 2))).rejects.toMatchObject({
-        code: "WORKBOOK_UNREADABLE",
-      });
+      await expect(validator().validate(bytes.subarray(0, bytes.length / 2))).rejects.toMatchObject(
+        {
+          code: "WORKBOOK_UNREADABLE",
+        },
+      );
     });
 
     it("refuses a workbook over the size limit without sending it anywhere (P0-VAL-05)", async () => {

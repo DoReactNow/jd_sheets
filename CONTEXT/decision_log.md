@@ -665,3 +665,19 @@ The pinned release's bridge is simpler than the later `craft-web-host` version t
 - **Golden workbooks** are written by the pinned GridCraft from command specs (`golden/*.json`) and committed; tests open them, compare values, save and reopen.
 - **Phase 0 E2E** runs the built app with `DEV_PRINCIPAL=on` (allowed under `APP_ENV=test`); Phase 1 replaces it with real test sign-in. Before typing into the canvas, E2E sends harmless keys (Escape, Ctrl+Home) because the first key after focus can be swallowed.
 - **Docker:** one `docker/Dockerfile` with targets `migrator`, `app`, `worker`, `collab`; a `tools` stage builds trunk and wasm-bindgen with Rust 1.99.1. `npm run docker:check` proves non-root images without compilers and a create-and-save through Caddy.
+
+---
+
+### Decision 45: Phase 0 Acceptance (Fresh-Clone Drill) Findings
+
+**Date:** 2026-11-06
+**Status:** Accepted
+
+#### Findings and fixes
+- **`.gitignore` hid source code.** The pattern `storage/` also matched `src/shared/storage/`, so that folder never reached GitHub; the local checkout passed every test because the files existed on disk. Fixed: build and data folders are anchored to the root (`/storage/`, `/dist/` …). The drill (clone from GitHub, then every check) is the only test that can catch this, so it stays part of every phase's acceptance.
+- **Cargo's built-in git client failed with an SSL error inside Docker** while fetching GridCraft's git dependencies. Fixed with `CARGO_NET_GIT_FETCH_WITH_CLI=true` in the Docker build stages.
+- **The Docker editor build has no submodule git metadata**, so `scripts/editor-build.mjs` has a copy mode (`EDITOR_BUILD_SOURCE=copy`); CI's vendor check still guarantees the source is the pinned commit.
+- **`npm run docker:check` stopped the everyday database** along with the full stack. Fixed: it stops only the full-stack services.
+
+#### Result
+From a fresh clone of the pull-request branch: lint, typecheck, builds, 232 unit, 50 integration, 33 Rust (including golden workbooks and contracts), 24 TypeScript contract and 4 E2E tests all passed. Docker: all four images build, run as non-root without compilers, and a workbook is created and saved through Caddy (`npm run docker:check`).

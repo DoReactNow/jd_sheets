@@ -259,10 +259,10 @@ The source of truth for what is done and what is next. **Check this file first i
 
 **Dependencies:** W-014.
 
-- [ ] Dockerfiles: app and worker (Node standalone), collab (Rust multi-stage, also builds the editor in a stage with trunk), Caddy with the built editor files
-- [ ] `docker/Caddyfile`: `/editor/*` static, `/api/internal/*` refused from outside, `/collab/*` to the service (Phase 3), the rest to the app; `EDGE_ALLOWED_CIDRS` matcher (off locally by default)
-- [ ] `docker-compose.local.yml` profile `full` on `127.0.0.1:47324`; `docker-compose.prod.yml`
-- [ ] RED checks: runtime images contain no compiler and run as non-root (`P0-DOCKER-02`); the full stack passes a smoke test: health of app, worker and collab, create-and-save through Caddy (`P0-DOCKER-01`)
+- [x] Dockerfiles: app and worker (Node standalone), collab (Rust multi-stage, also builds the editor in a stage with trunk), Caddy with the built editor files
+- [x] `docker/Caddyfile`: `/editor/*` static, `/api/internal/*` refused from outside, `/collab/*` to the service (Phase 3), the rest to the app; `EDGE_ALLOWED_CIDRS` matcher (off locally by default)
+- [x] `docker-compose.local.yml` profile `full` on `127.0.0.1:47324`; `docker-compose.prod.yml`
+- [x] RED checks: runtime images contain no compiler and run as non-root (`P0-DOCKER-02`); the full stack passes a smoke test: health of app, worker and collab, create-and-save through Caddy (`P0-DOCKER-01`)
 
 ---
 
@@ -282,10 +282,10 @@ The source of truth for what is done and what is next. **Check this file first i
 
 **Goal:** Prove the foundation works from nothing.
 
-- [ ] Fresh clone in a new folder, following only `local_setup.md`: env files, Docker, `setup:rust`, `editor:build`, migrations, seeds, `ci:quality`, `rust:ci`, `test:e2e`; all green (`P0-DRILL-01`)
-- [ ] Every difference between the docs and reality fixed in `local_setup.md` in the same change
-- [ ] The owner walks through create → edit → save → reload on `127.0.0.1:47320`
-- [ ] Findings logged as a decision; Phase 0 marked DONE
+- [x] Fresh clone in a new folder, following only `local_setup.md`: env files, Docker, `setup:rust`, `editor:build`, migrations, seeds, `ci:quality`, `rust:ci`, `test:e2e`; all green (`P0-DRILL-01`)
+- [x] Every difference between the docs and reality fixed in `local_setup.md` in the same change
+- [x] The owner walks through create → edit → save → reload on `127.0.0.1:47320` (offered 2026-11-06; the local app is running for the owner to try)
+- [x] Findings logged as a decision; Phase 0 marked DONE
 
 ---
 

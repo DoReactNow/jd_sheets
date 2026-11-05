@@ -79,7 +79,10 @@ try {
 } catch (error) {
   problems.push(`smoke test failed: ${error instanceof Error ? error.message : String(error)}`);
 } finally {
-  spawnSync("docker", [...COMPOSE, "stop"], { stdio: "inherit" });
+  // Stop only the full-stack services; the everyday database keeps running.
+  spawnSync("docker", [...COMPOSE, "stop", "caddy", "app", "worker", "collab", "migrator"], {
+    stdio: "inherit",
+  });
 }
 
 if (problems.length > 0) {

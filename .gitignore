@@ -3,10 +3,10 @@ node_modules/
 
 # builds
 .next/
-out/
-dist/
-build/
-target/
+/out/
+/dist/
+/build/
+**/target/
 .build/
 public/editor/
 src/generated/
@@ -21,7 +21,7 @@ next-env.d.ts
 !.env.production.example
 
 # local data
-storage/
+/storage/
 prisma/private/
 
 # test output

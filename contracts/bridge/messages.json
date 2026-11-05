@@ -1,0 +1,11 @@
+{
+  "source": "vendor/gridcraft/apps/gridcraft-web/src/host.rs at the pinned tag",
+  "fromEditor": [
+    { "type": "gridcraft:ready", "version": "0.16.1" },
+    { "type": "gridcraft:dirty", "dirty": true },
+    { "type": "gridcraft:save", "name": "Budget.xlsx", "bytes": "<ArrayBuffer>" },
+    { "type": "gridcraft:failed", "error": "<text, never shown to users>" }
+  ],
+  "toEditor": [{ "type": "gridcraft:open", "name": "Budget.xlsx", "bytes": "<ArrayBuffer>" }],
+  "query": "?host=parent&chrome=notitlebar&author=<display name>"
+}

@@ -10,10 +10,10 @@ export function ErrorPageContent({ error, retry }: { error: unknown; retry: () =
       : undefined;
   const friendly = toFriendlyError({ status: 500, reference: digest });
   return (
-    <main>
+    <main className="message-page">
       <h1>Something went wrong</h1>
       <ErrorMessage error={friendly} />
-      <button type="button" onClick={() => retry()}>
+      <button className="btn btn-primary" type="button" onClick={() => retry()}>
         Try again
       </button>
       <SupportContact />

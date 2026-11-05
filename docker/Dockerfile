@@ -10,11 +10,15 @@ ARG RUST_VERSION=1.95.0
 
 # --- Build tools that need a newer compiler than GridCraft's minimum --------------------------
 FROM rust:1.99.1-bookworm AS tools
+ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
 RUN cargo install trunk --locked --version 0.22.1 \
  && cargo install wasm-bindgen-cli --locked --version 0.2.129
 
 # --- Rust: the editor (WebAssembly) and the collab service -------------------------------------
 FROM rust:${RUST_VERSION}-bookworm AS rust-build
+# GridCraft has git dependencies (egui, craft-libs); the git CLI is more reliable than cargo's
+# built-in client behind Docker networking.
+ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
 RUN rustup target add wasm32-unknown-unknown \
  && apt-get update \
  && apt-get install -y --no-install-recommends nodejs rsync binaryen \

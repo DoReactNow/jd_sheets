@@ -1,0 +1,126 @@
+# Continuous integration (Decision 33): separate, named steps; the build runs before the tests.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: jdsheets
+          POSTGRES_PASSWORD: jdsheets
+          POSTGRES_DB: jdsheets_dev
+        ports: ["47322:5432"]
+        options: >-
+          --health-cmd "pg_isready -U jdsheets -d jdsheets_dev"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      CI: "true"
+    steps:
+      - name: Checkout (with the GridCraft submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Rust toolchain (pinned) and the WebAssembly target
+        run: |
+          rustup toolchain install "$(grep -oP 'channel = "\K[^"]+' services/collab/rust-toolchain.toml)" \
+            --profile minimal --component rustfmt,clippy --target wasm32-unknown-unknown
+          rustup toolchain install stable --profile minimal
+
+      - name: trunk and wasm-bindgen (prebuilt, pinned)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: trunk@0.22.1,wasm-bindgen@0.2.129
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            services/collab -> target
+            .build/gridcraft -> ../target
+
+      - name: Env files and the test database
+        run: |
+          cp .env.example .env
+          cp .env.test.example .env.test
+          PGPASSWORD=jdsheets psql -h 127.0.0.1 -p 47322 -U jdsheets -d jdsheets_dev -c "CREATE DATABASE jdsheets_test OWNER jdsheets;"
+
+      - name: Install
+        run: npm ci
+
+      - name: Prisma client
+        run: npm run db:generate
+
+      - name: Lint (ESLint, architecture, formatting, vendor check, files guard)
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Rust fmt and clippy
+        run: npm run rust:check
+
+      - name: Build editor (GridCraft + patches)
+        run: npm run editor:build
+
+      - name: Build app
+        run: npm run build
+
+      - name: Build worker
+        run: npm run build:worker
+
+      - name: Build collab service
+        run: npm run rust:build
+
+      - name: Migrations match the schema
+        run: npm run db:migrate:check
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Integration tests
+        run: npm run test:integration
+
+      - name: Rust tests (unit, contract, golden workbooks)
+        run: npm run rust:test
+
+      - name: Contract tests (TypeScript side, against the real collab service)
+        run: npm run test:contract
+
+      - name: E2E browser
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E tests
+        run: npm run test:e2e
+
+      - name: E2E report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7

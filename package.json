@@ -52,7 +52,10 @@
     "db:seed:test": "dotenv run -q --override -f .env.test -- tsx prisma/seed-test.ts",
     "db:reset:dev": "tsx scripts/reset-db.ts .env",
     "db:reset:test": "tsx scripts/reset-db.ts .env.test",
-    "contracts:generate": "tsx scripts/generate-contracts.ts && prettier --write contracts"
+    "contracts:generate": "tsx scripts/generate-contracts.ts && prettier --write contracts",
+    "docker:full:up": "docker compose -f docker/docker-compose.local.yml --profile full up -d --build --wait",
+    "docker:full:down": "docker compose -f docker/docker-compose.local.yml --profile full down",
+    "docker:check": "node scripts/docker-check.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.1",

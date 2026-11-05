@@ -37,4 +37,15 @@ if (installed === `trunk ${TRUNK_VERSION}`) {
   run("rustup", ["toolchain", "install", "stable", "--profile", "minimal"]);
   run("cargo", ["+stable", "install", "trunk", "--locked", "--version", TRUNK_VERSION]);
 }
+let bindgen = "";
+try {
+  bindgen = execFileSync("wasm-bindgen", ["--version"], { env, encoding: "utf8" }).trim();
+} catch {
+  bindgen = "";
+}
+if (bindgen === "wasm-bindgen 0.2.129") {
+  console.log(`${bindgen} already installed`);
+} else {
+  run("cargo", ["+stable", "install", "wasm-bindgen-cli", "--locked", "--version", "0.2.129"]);
+}
 console.log("Rust setup complete. Make sure ~/.cargo/bin is on your PATH.");

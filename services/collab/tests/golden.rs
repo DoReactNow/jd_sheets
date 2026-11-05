@@ -44,7 +44,10 @@ fn commands_of(spec: &Spec) -> Vec<(String, Value)> {
         for r in 1..=grid.rows {
             for c in 1..=grid.columns {
                 let cell = format!("{}{r}", column_name(c));
-                commands.push(("cell.set".into(), serde_json::json!({ "cell": cell, "input": (r * c).to_string() })));
+                commands.push((
+                    "cell.set".into(),
+                    serde_json::json!({ "cell": cell, "input": (r * c).to_string() }),
+                ));
             }
         }
     }
@@ -53,19 +56,27 @@ fn commands_of(spec: &Spec) -> Vec<(String, Value)> {
 
 fn specs() -> Vec<(String, Spec)> {
     let mut out = Vec::new();
-    let Ok(entries) = std::fs::read_dir(golden_dir()) else { return out };
+    let Ok(entries) = std::fs::read_dir(golden_dir()) else {
+        return out;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.extension().is_some_and(|e| e == "json") {
-            let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+            let name = path
+                .file_stem()
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_default();
             let text = std::fs::read_to_string(&path).unwrap_or_default();
             match serde_json::from_str::<Spec>(&text) {
                 Ok(spec) => out.push((name, spec)),
-                Err(error) => out.push((format!("{name} (unparsable: {error})"), Spec {
-                    generate: None,
-                    commands: vec![],
-                    expect: BTreeMap::from([("!".into(), "unparsable spec".into())]),
-                })),
+                Err(error) => out.push((
+                    format!("{name} (unparsable: {error})"),
+                    Spec {
+                        generate: None,
+                        commands: vec![],
+                        expect: BTreeMap::from([("!".into(), "unparsable spec".into())]),
+                    },
+                )),
             }
         }
     }

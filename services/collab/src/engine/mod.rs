@@ -5,8 +5,8 @@ use std::io::Cursor;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use gridcraft_core::CellRef;
-use gridcraft_engine::display::cell_text;
 use gridcraft_engine::Session;
+use gridcraft_engine::display::cell_text;
 use gridcraft_engine::io::{open_bytes, save_bytes};
 use gridcraft_model::Workbook;
 use gridcraft_xlsx::{Format, sniff};
@@ -99,7 +99,9 @@ pub fn to_xlsx(workbook: &Workbook) -> Result<Vec<u8>, EngineFailure> {
 /// Used to make golden workbooks (golden/*.json); an unknown or failing command is an error.
 pub fn build_from_commands(commands: &[(String, serde_json::Value)]) -> Result<Vec<u8>, String> {
     let mut session = Session::new();
-    session.execute("file.new", serde_json::json!({})).map_err(|e| format!("file.new: {e}"))?;
+    session
+        .execute("file.new", serde_json::json!({}))
+        .map_err(|e| format!("file.new: {e}"))?;
     for (id, params) in commands {
         session.execute(id, params.clone()).map_err(|e| format!("{id}: {e}"))?;
     }

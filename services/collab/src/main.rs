@@ -6,8 +6,35 @@ use std::sync::Arc;
 use jd_collab::config::Config;
 use jd_collab::http::{AppState, router};
 
+/// `jd-collab --healthcheck`: exits 0 when the local service answers /health (Docker HEALTHCHECK;
+/// the runtime image has no curl).
+fn healthcheck() -> i32 {
+    use std::io::{Read, Write};
+    let port = std::env::var("COLLAB_PORT").unwrap_or_else(|_| "47321".into());
+    let Ok(mut stream) = std::net::TcpStream::connect(format!("127.0.0.1:{port}")) else {
+        return 1;
+    };
+    let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(3)));
+    if stream
+        .write_all(b"GET /health HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n")
+        .is_err()
+    {
+        return 1;
+    }
+    let mut response = String::new();
+    let _ = stream.read_to_string(&mut response);
+    if response.starts_with("HTTP/1.0 200") || response.starts_with("HTTP/1.1 200") {
+        0
+    } else {
+        1
+    }
+}
+
 #[tokio::main]
 async fn main() {
+    if std::env::args().any(|arg| arg == "--healthcheck") {
+        std::process::exit(healthcheck());
+    }
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::try_from_env("COLLAB_LOG").unwrap_or_else(|_| "info".into()))
         .init();

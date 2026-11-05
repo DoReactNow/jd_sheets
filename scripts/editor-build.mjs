@@ -26,16 +26,36 @@ const patchDir = path.join(ROOT, "patches/gridcraft");
 const started = process.hrtime.bigint();
 const { tag, commit } = pinnedGridcraft();
 
+// Inside a Docker build there is no git metadata for the submodule (EDITOR_BUILD_SOURCE=copy):
+// the source is copied as it is, and CI's vendor check guarantees it is the pinned commit.
+const copyMode = process.env.EDITOR_BUILD_SOURCE === "copy";
+
 // 1. The vendored source must be exactly the pinned commit, untouched.
-execFileSync("node", [path.join(ROOT, "scripts/check-vendor-clean.mjs")], { stdio: "inherit" });
+if (!copyMode) {
+  execFileSync("node", [path.join(ROOT, "scripts/check-vendor-clean.mjs")], {
+    stdio: "inherit",
+  });
+}
 
 // 2. Committed files of the pinned commit, into a scratch folder, then patched.
 const scratch = mkdtempSync(path.join(tmpdir(), "jd-gridcraft-"));
 try {
-  execFileSync("sh", [
-    "-c",
-    `git -C "${vendor}" archive --format=tar HEAD | tar -x -C "${scratch}"`,
-  ]);
+  if (copyMode) {
+    execFileSync("rsync", [
+      "-a",
+      "--exclude",
+      ".git",
+      "--exclude",
+      "target",
+      `${vendor}/`,
+      `${scratch}/`,
+    ]);
+  } else {
+    execFileSync("sh", [
+      "-c",
+      `git -C "${vendor}" archive --format=tar HEAD | tar -x -C "${scratch}"`,
+    ]);
+  }
   let patches;
   try {
     patches = applyPatches(scratch, patchDir);

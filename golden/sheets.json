@@ -1,0 +1,16 @@
+{
+  "commands": [
+    ["sheet.rename", { "name": "Summary" }],
+    ["home.insertSheet", { "name": "Data" }],
+    ["cell.set", { "sheet": "Data", "cell": "A1", "input": "5" }],
+    ["cell.set", { "sheet": "Data", "cell": "A2", "input": "7" }],
+    ["cell.set", { "sheet": "Summary", "cell": "A1", "input": "=SUM(Data!A1:A2)" }],
+    ["home.insertSheet", { "name": "Q4 Plan" }],
+    ["cell.set", { "sheet": "Q4 Plan", "cell": "B2", "input": "=Summary!A1*2" }]
+  ],
+  "expect": {
+    "Summary!A1": "12",
+    "Data!A2": "7",
+    "Q4 Plan!B2": "24"
+  }
+}

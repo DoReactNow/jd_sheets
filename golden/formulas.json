@@ -1,0 +1,29 @@
+{
+  "commands": [
+    ["cell.set", { "cell": "A1", "input": "10" }],
+    ["cell.set", { "cell": "A2", "input": "20" }],
+    ["cell.set", { "cell": "A3", "input": "30" }],
+    ["cell.set", { "cell": "B1", "input": "=SUM(A1:A3)" }],
+    ["cell.set", { "cell": "B2", "input": "=AVERAGE(A1:A3)" }],
+    ["cell.set", { "cell": "B3", "input": "=IF(B1>50,\"high\",\"low\")" }],
+    ["cell.set", { "cell": "B4", "input": "=ROUND(A1/3,2)" }],
+    ["cell.set", { "cell": "B5", "input": "=CONCAT(\"Q\",A1/10)" }],
+    ["cell.set", { "cell": "B6", "input": "=1/0" }],
+    ["cell.set", { "cell": "D1", "input": "North" }],
+    ["cell.set", { "cell": "E1", "input": "48200" }],
+    ["cell.set", { "cell": "D2", "input": "South" }],
+    ["cell.set", { "cell": "E2", "input": "39150" }],
+    ["cell.set", { "cell": "B7", "input": "=VLOOKUP(\"South\",D1:E2,2,FALSE)" }],
+    ["cell.set", { "cell": "B8", "input": "=SUMPRODUCT(A1:A3,A1:A3)" }]
+  ],
+  "expect": {
+    "Sheet1!B1": "60",
+    "Sheet1!B2": "20",
+    "Sheet1!B3": "high",
+    "Sheet1!B4": "3.33",
+    "Sheet1!B5": "Q1",
+    "Sheet1!B6": "#DIV/0!",
+    "Sheet1!B7": "39150",
+    "Sheet1!B8": "1400"
+  }
+}

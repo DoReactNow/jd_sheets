@@ -1,0 +1,7 @@
+{
+  "workbookMaxBytes": 52428800,
+  "tokenTtlSeconds": 300,
+  "tokenLeewaySeconds": 30,
+  "tokenIssuer": "jd-sheets-app",
+  "tokenAudience": "jd-sheets-collab"
+}

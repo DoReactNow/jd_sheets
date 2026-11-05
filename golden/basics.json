@@ -1,0 +1,22 @@
+{
+  "commands": [
+    ["cell.set", { "cell": "A1", "input": "Item" }],
+    ["cell.set", { "cell": "B1", "input": "Amount" }],
+    ["cell.set", { "cell": "A2", "input": "Rent" }],
+    ["cell.set", { "cell": "B2", "input": "120000" }],
+    ["cell.set", { "cell": "A3", "input": "चाय और नाश्ता" }],
+    ["cell.set", { "cell": "B3", "input": "2500.75" }],
+    ["cell.set", { "cell": "A4", "input": "Emoji 📊 and quotes 'x' \"y\"" }],
+    ["cell.set", { "cell": "B4", "input": "-42" }],
+    ["cell.set", { "cell": "C1", "input": "TRUE" }]
+  ],
+  "expect": {
+    "Sheet1!A1": "Item",
+    "Sheet1!B2": "120000",
+    "Sheet1!A3": "चाय और नाश्ता",
+    "Sheet1!B3": "2500.75",
+    "Sheet1!A4": "Emoji 📊 and quotes 'x' \"y\"",
+    "Sheet1!B4": "-42",
+    "Sheet1!C1": "TRUE"
+  }
+}

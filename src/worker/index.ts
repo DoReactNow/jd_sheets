@@ -1,0 +1,50 @@
+// The worker process (Decision 31): runs every module's background jobs and writes a heartbeat.
+// `npm run worker:dev` in development; the "worker" service in Docker. The web app only enqueues.
+import { hostname } from "node:os";
+import { HEARTBEAT_INTERVAL_SECONDS } from "@/modules/system";
+import { getEnv } from "@/shared/config/env";
+import { getPrisma } from "@/shared/db/prisma";
+import { createPgBoss, createPgBossJobQueue, startJobWorkers } from "@/shared/jobs/pgBoss";
+import { logger } from "@/shared/logger";
+import { getFileStorage } from "@/shared/storage";
+import { startHeartbeat } from "./heartbeat";
+import { collectWorkerJobs, collectWorkerSchedules } from "./workerJobs";
+
+async function main(): Promise<void> {
+  const env = getEnv();
+  getFileStorage(); // fail at startup, not on the first job, when the storage driver is wrong
+  const workerId = `${hostname()}:${process.pid}`;
+  const jobs = collectWorkerJobs(env.APP_ENV);
+
+  const boss = createPgBoss({ connectionString: env.DATABASE_URL, role: "worker" });
+  boss.on("error", (error) => logger.error("pg-boss error", { err: error }));
+  await boss.start(); // creates or migrates the pgboss schema
+  await startJobWorkers(boss, jobs.values(), logger);
+  const queue = createPgBossJobQueue(boss);
+  for (const { job, cron, payload } of collectWorkerSchedules()) {
+    await queue.schedule(job as never, cron, payload as never);
+  }
+  const heartbeat = await startHeartbeat({
+    workerId,
+    intervalMs: HEARTBEAT_INTERVAL_SECONDS * 1000,
+  });
+  logger.info("worker started", { workerId, jobs: [...jobs.keys()] });
+
+  let stopping = false;
+  const shutdown = async (signal: string) => {
+    if (stopping) return;
+    stopping = true;
+    logger.info("worker stopping", { signal });
+    heartbeat.stop();
+    await boss.stop({ graceful: true, timeout: 10_000 });
+    await getPrisma().$disconnect();
+    process.exit(0);
+  };
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
+}
+
+main().catch((error: unknown) => {
+  logger.fatal("worker failed to start", { err: error });
+  process.exit(1);
+});

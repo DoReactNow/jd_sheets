@@ -1,0 +1,38 @@
+// Instants: moments in time, stored as timestamptz and sent as ISO-8601 UTC strings ending in Z.
+import { DateTime } from "luxon";
+
+/** Parses an ISO-8601 instant. A zone (Z or an offset) is required, so nothing is read as local time. */
+export function parseInstant(value: string): Date {
+  if (!/(Z|[+-]\d\d:?\d\d)$/.test(value)) {
+    throw new RangeError(`Not an ISO-8601 instant with a zone: "${value}"`);
+  }
+  const parsed = DateTime.fromISO(value, { setZone: true });
+  if (!parsed.isValid) throw new RangeError(`Not an ISO-8601 instant with a zone: "${value}"`);
+  return parsed.toJSDate();
+}
+
+/** The API form of an instant: ISO-8601 UTC with milliseconds, e.g. 2027-01-01T00:00:00.000Z. */
+export function toIsoInstant(instant: Date): string {
+  return instant.toISOString();
+}
+
+/** The instant at a number of milliseconds since the Unix epoch (for example from a job clock). */
+export function instantFromEpochMs(ms: number): Date {
+  return new Date(ms);
+}
+
+/** An instant plus a fixed length of time, in real elapsed time (not calendar days). */
+export function plusDuration(instant: Date, duration: { hours?: number; days?: number }): Date {
+  const ms = ((duration.days ?? 0) * 24 + (duration.hours ?? 0)) * 3_600_000;
+  return instantFromEpochMs(instant.getTime() + ms);
+}
+
+/** Reads the end date in an HTTPS certificate, such as "Jan  2 15:04:05 2027 GMT". */
+export function parseCertificateDate(value: string): Date {
+  const parsed = DateTime.fromFormat(value.replace(/\s+/g, " "), "LLL d HH:mm:ss yyyy 'GMT'", {
+    zone: "utc",
+    locale: "en-US",
+  });
+  if (!parsed.isValid) throw new RangeError(`Not a certificate date: "${value}"`);
+  return parsed.toJSDate();
+}

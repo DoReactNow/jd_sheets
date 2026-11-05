@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+
+# builds
+.next/
+out/
+dist/
+build/
+target/
+.build/
+public/editor/
+src/generated/
+*.tsbuildinfo
+next-env.d.ts
+
+# env files (examples are committed)
+.env
+.env.*
+!.env.example
+!.env.test.example
+!.env.production.example
+
+# local data
+storage/
+prisma/private/
+
+# test output
+coverage/
+playwright-report/
+test-results/
+blob-report/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

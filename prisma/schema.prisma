@@ -1,0 +1,38 @@
+// JD Sheets: the Prisma schema. Target design: CONTEXT/database_schema.md.
+// Conventions (database_schema.md Section 1): instants are @db.Timestamptz(3), IDs are UUID v7,
+// tables are named <module>_<plural_noun>, columns snake_case. Prisma owns every migration,
+// including tables only the Rust service writes (Decision 30). Each phase adds only its own models.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  // CommonJS, so the esbuild bundle (dist/worker.js) can include it.
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// system module
+// ---------------------------------------------------------------------------
+
+// Owner: system. Editable settings, if any are ever needed (database_schema.md 3.1).
+model SystemSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("system_settings")
+}
+
+// Owner: system. One row per worker process; diagnostics reads the newest (Decision 31).
+model SystemWorkerHeartbeat {
+  workerId   String   @id @map("worker_id")
+  version    String
+  startedAt  DateTime @map("started_at") @db.Timestamptz(3)
+  lastBeatAt DateTime @map("last_beat_at") @db.Timestamptz(3)
+
+  @@map("system_worker_heartbeats")
+}

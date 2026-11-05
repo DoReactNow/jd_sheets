@@ -36,3 +36,58 @@ model SystemWorkerHeartbeat {
 
   @@map("system_worker_heartbeats")
 }
+
+// ---------------------------------------------------------------------------
+// workbooks module (database_schema.md 3.2, 3.3)
+// ---------------------------------------------------------------------------
+
+enum WorkbookVersionSource {
+  CREATE
+  SAVE
+  AUTOSAVE
+  IMPORT
+  RESTORE
+  LIVE_SNAPSHOT
+
+  @@map("workbook_version_source")
+}
+
+// Owner: workbooks. The file bytes live in FileStorage, never here (Decision 19).
+model Workbook {
+  id               String            @id @default(uuid(7)) @db.Uuid
+  title            String            @db.VarChar(200)
+  // Phase 0: no users table yet, so no foreign key (Phase 1 backfills and adds it).
+  ownerId          String?           @map("owner_id") @db.Uuid
+  currentVersionId String?           @unique @map("current_version_id") @db.Uuid
+  currentVersion   WorkbookVersion?  @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: Restrict)
+  sizeBytes        BigInt            @default(0) @map("size_bytes")
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  versions         WorkbookVersion[] @relation("Versions")
+
+  @@index([ownerId, updatedAt(sort: Desc)])
+  @@index([updatedAt(sort: Desc)])
+  @@map("workbooks_workbooks")
+}
+
+// Owner: workbooks. One stored file per version; the newest is the workbook's current version.
+model WorkbookVersion {
+  id              String                @id @default(uuid(7)) @db.Uuid
+  workbookId      String                @map("workbook_id") @db.Uuid
+  workbook        Workbook              @relation("Versions", fields: [workbookId], references: [id], onDelete: Cascade)
+  number          Int
+  storageKey      String                @unique @map("storage_key")
+  sizeBytes       BigInt                @map("size_bytes")
+  sha256          String                @db.Char(64)
+  source          WorkbookVersionSource
+  restoredFromId  String?               @map("restored_from_id") @db.Uuid
+  name            String?               @db.VarChar(100)
+  createdById     String?               @map("created_by_id") @db.Uuid
+  contributorIds  String[]              @default([]) @map("contributor_ids") @db.Uuid
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  currentOf       Workbook?             @relation("CurrentVersion")
+
+  @@unique([workbookId, number])
+  @@index([workbookId, createdAt(sort: Desc)])
+  @@map("workbooks_versions")
+}

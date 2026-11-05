@@ -16,7 +16,7 @@ export type SystemRoleCode = (typeof SYSTEM_ROLE_CODES)[number];
 export const DEFAULT_ROLES = {
   SUPER_ADMIN: {
     name: "Super Admin",
-    description: "Runs JD Sheets: everything, including network access and the admins.",
+    description: "Everything, including network access and managing the admins.",
     bypassesAccess: true,
     permissions: [],
   },

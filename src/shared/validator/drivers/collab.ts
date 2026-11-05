@@ -23,7 +23,7 @@ export function createCollabValidator(): WorkbookValidator {
       if (bytes.byteLength > APP_CONFIG.workbooks.maxBytes) throw new AppError("WORKBOOK_TOO_LARGE");
       const response = await collabRequest("/internal/workbooks/validate", {
         method: "POST",
-        body: Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+        body: new Uint8Array(bytes),
         contentType: APP_CONFIG.workbooks.mediaType,
       });
       if (!response.ok) throw await failure(response);

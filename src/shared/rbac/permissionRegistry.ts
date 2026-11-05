@@ -76,7 +76,7 @@ export const PERMISSIONS = {
   },
   "network:manage": {
     label: "Manage network access",
-    description: "Change which networks can reach JD Sheets.",
+    description: "Change which networks can reach the app.",
     module: "network",
     reserved: false,
   },

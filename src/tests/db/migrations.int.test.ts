@@ -1,4 +1,4 @@
-// W-007: the baseline migration creates the Phase 0 tables and is recorded by Prisma.
+// W-004: the baseline migration creates the Phase 0 tables and is recorded by Prisma.
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getEnv } from "@/shared/config/env";
@@ -17,47 +17,10 @@ describe("migrations", () => {
     );
     expect(rows.map((row) => row.table_name)).toEqual([
       "_prisma_migrations",
-      "assignment_agent_settings",
-      "assignment_batches",
-      "assignment_escalations",
-      "assignment_pool_eligibility",
-      "assignment_pool_entries",
-      "assignment_records",
-      "assignment_rules",
-      "assignment_shifts",
-      "audit_events",
-      "identity_login_throttle",
-      "identity_permissions",
-      "identity_role_permissions",
-      "identity_roles",
-      "identity_sessions",
-      "identity_team_members",
-      "identity_teams",
-      "identity_users",
-      "leads_consent_records",
-      "leads_contacts",
-      "leads_leads",
-      "leads_notes",
-      "leads_pipeline_stages",
-      "leads_tasks",
-      "leads_timeline_entries",
-      "messaging_conversations",
-      "messaging_messages",
-      "messaging_templates",
-      "messaging_webhook_events",
-      "monitoring_alerts",
-      "monitoring_errors",
-      "notifications_notifications",
-      "notifications_preferences",
-      "notifications_push_subscriptions",
-      "system_file_deletions",
-      "system_rate_limits",
       "system_settings",
       "system_worker_heartbeats",
-      "telephony_agent_endpoints",
-      "telephony_calls",
-      "telephony_recordings",
-      "telephony_webhook_events",
+      "workbooks_versions",
+      "workbooks_workbooks",
     ]);
   });
 
@@ -65,10 +28,8 @@ describe("migrations", () => {
     const { rows } = await client.query<{ migration_name: string; finished_at: Date | null }>(
       `SELECT migration_name, finished_at FROM _prisma_migrations ORDER BY migration_name`,
     );
-    expect(rows[0].migration_name).toMatch(/^\d{14}_init_identity_rbac_system$/);
-    expect(rows.map((row) => row.migration_name.slice(15))).toContain(
-      "identity_users_sessions_audit",
-    );
+    expect(rows[0].migration_name).toMatch(/^\d{14}_init_system_settings$/);
+    expect(rows.map((row) => row.migration_name.slice(15))).toContain("add_workbooks_and_versions");
     expect(rows.every((row) => row.finished_at !== null)).toBe(true);
   });
 
@@ -81,12 +42,12 @@ describe("migrations", () => {
       `SELECT column_name, data_type, datetime_precision AS precision
        FROM information_schema.columns
        WHERE table_schema = 'public' AND table_name = 'system_worker_heartbeats'
-         AND column_name IN ('startedAt', 'lastBeatAt')
+         AND column_name IN ('started_at', 'last_beat_at')
        ORDER BY column_name`,
     );
     expect(rows).toEqual([
-      { column_name: "lastBeatAt", data_type: "timestamp with time zone", precision: 3 },
-      { column_name: "startedAt", data_type: "timestamp with time zone", precision: 3 },
+      { column_name: "last_beat_at", data_type: "timestamp with time zone", precision: 3 },
+      { column_name: "started_at", data_type: "timestamp with time zone", precision: 3 },
     ]);
   });
 });

@@ -14,19 +14,18 @@ describe("resetDatabase", () => {
   it("empties every application table but keeps the migration history", async () => {
     await resetDatabase(); // start from a known state, whatever ran before
     await client.query(
-      `INSERT INTO system_worker_heartbeats ("workerId", version, "startedAt", "lastBeatAt")
+      `INSERT INTO system_worker_heartbeats (worker_id, version, started_at, last_beat_at)
        VALUES ('test-worker', 'v', now(), now())`,
     );
     await client.query(
-      `INSERT INTO identity_roles (id, code, name, "updatedAt")
-       VALUES (gen_random_uuid(), 'RESET_PROBE', 'Probe', now())`,
+      `INSERT INTO system_settings (key, value, updated_at) VALUES ('reset-probe', '{}', now())`,
     );
     expect(await count("system_worker_heartbeats")).toBe(1);
 
     await resetDatabase();
 
     expect(await count("system_worker_heartbeats")).toBe(0);
-    expect(await count("identity_roles")).toBe(0);
+    expect(await count("system_settings")).toBe(0);
     expect(await count("_prisma_migrations")).toBeGreaterThan(0);
   });
 

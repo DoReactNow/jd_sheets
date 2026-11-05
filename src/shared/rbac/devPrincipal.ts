@@ -2,6 +2,7 @@
 // The env loader refuses DEV_PRINCIPAL=on in production, and the resolver below refuses it outside
 // development and test as a second lock. Phase 1 replaces it with real sessions.
 import { getEnv } from "@/shared/config/env";
+import type { PermissionCode } from "./permissionRegistry";
 import type { Principal } from "./principal";
 import type { PrincipalResolver } from "./principalResolver";
 
@@ -12,7 +13,7 @@ export const DEV_PRINCIPAL: Principal = Object.freeze({
   displayName: "Developer",
   roleCode: "SUPER_ADMIN",
   bypassesAccess: true,
-  permissions: new Set(),
+  permissions: new Set<PermissionCode>(),
 });
 
 export function isDevPrincipal(principal: Principal | null): boolean {

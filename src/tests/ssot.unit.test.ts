@@ -1,5 +1,5 @@
-// SSOT scan (Decision 7): email and phone literals, and the product and company names,
-// may appear in src/ only inside appConfig.ts, tests and fixtures.
+// SSOT scan (Decision 29, P0-ARCH-02): email addresses, the allowed email domain, and the product
+// and company names may appear in src/ only inside appConfig.ts, tests and fixtures.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -31,8 +31,7 @@ const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const PATTERNS: Array<[string, RegExp]> = [
   ["email address", /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/],
-  ["E.164 phone number", /\+[1-9]\d{6,14}\b/],
-  ["10-digit phone number", /(?<![\d.])\d{10}(?![\d.])/],
+  ["email domain", new RegExp(escape(APP_CONFIG.company.allowedEmailDomain), "i")],
   ["product name", new RegExp(escape(APP_CONFIG.product.name), "i")],
   ["company name", new RegExp(escape(APP_CONFIG.company.legalName), "i")],
 ];

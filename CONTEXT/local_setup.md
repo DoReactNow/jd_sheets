@@ -1,6 +1,6 @@
 # Local Environment Setup Guide: JD Sheets
 
-How to run JD Sheets on a developer machine (macOS, Linux, or Windows with WSL2). Everything here is **planned**; W-017 (the fresh-clone drill) checks it against reality and fixes every difference.
+How to run JD Sheets on a developer machine (macOS, Linux, or Windows with WSL2). Checked against reality in Phase 0 (W-017, 2026-11-06). If anything here is wrong, fix it in the same change that finds it.
 
 Always use `127.0.0.1`, never `localhost` (Decision 27).
 
@@ -25,9 +25,10 @@ Always use `127.0.0.1`, never `localhost` (Decision 27).
 | rustup | any | installs the pinned Rust toolchain from `services/collab/rust-toolchain.toml` |
 | Rust toolchain | pinned (1.95 at writing, GridCraft's minimum) | Rust service and the editor build |
 | `wasm32-unknown-unknown` target | via rustup | editor (WebAssembly) |
-| trunk | pinned in W-001 | builds GridCraft's web app |
+| trunk | 0.22.1 | builds GridCraft's web app (built with the stable toolchain, Decision 42) |
+| wasm-bindgen-cli | 0.2.129 | used by trunk; installed locally so the build never depends on trunk downloading it |
 
-macOS note (checked 2026-11-06 on the owner's Mac): `rustup` is installed through Homebrew but no toolchain is active yet, and `cargo`/`trunk` are not on the `PATH`. `npm run setup:rust` installs the toolchain and trunk; make sure `~/.cargo/bin` is on the `PATH` (add `export PATH="$HOME/.cargo/bin:$PATH"` to `~/.zshrc`).
+macOS note (checked 2026-11-06 on the owner's Mac): `rustup` comes from Homebrew, whose `cargo` lives in `/opt/homebrew/opt/rustup/bin`, and installed tools go to `~/.cargo/bin`. The npm scripts add both to `PATH` themselves; for your own terminal, add `export PATH="/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin:$PATH"` to `~/.zshrc`. `npm run setup:rust` installs the pinned toolchain, trunk and wasm-bindgen.
 
 ---
 
@@ -56,11 +57,23 @@ npm run editor:build
 ```
 
 ```bash
-docker compose -f docker/docker-compose.local.yml up -d db
+npm run db:up
 ```
 
 ```bash
-npm run db:migrate:deploy && npm run db:sync-rbac && npm run db:seed:dev
+npm run db:generate && npm run db:migrate:deploy
+```
+
+In a second terminal, start the Rust service (the first run compiles it):
+
+```bash
+npm run collab:dev
+```
+
+Then the sample workbooks (they are checked by the Rust service):
+
+```bash
+npm run db:seed:dev
 ```
 
 ```bash
@@ -73,7 +86,7 @@ npm run dev:all
 
 Then open `http://127.0.0.1:47320`.
 
-`dev:all` starts the app, the worker and the Rust service together with labelled output. Separately: `npm run dev`, `npm run worker:dev`, `npm run collab:dev`.
+`dev:all` starts the app, the worker and the Rust service together with labelled output. Separately: `npm run dev`, `npm run worker:dev`, `npm run collab:dev`. (`db:sync-rbac` arrives in Phase 1.)
 
 Before the first E2E run on a machine:
 
@@ -81,7 +94,7 @@ Before the first E2E run on a machine:
 npx playwright install chromium
 ```
 
-The first `editor:build` compiles GridCraft to WebAssembly and takes several minutes; later builds are faster. W-002 records the real time and bundle size here.
+The first `editor:build` compiles GridCraft to WebAssembly: about 4 minutes on the owner's Mac (later builds about 40 seconds). The result is about 24 MB of WebAssembly (compressed by Caddy in production). To look at plain GridCraft on its own, `npm run editor:serve` → `http://127.0.0.1:47325/?sample=sales`.
 
 ---
 
@@ -317,7 +330,7 @@ npm run admin:reset-ip-rules -- --cidr <cidr>
 | `npm run test:integration` | Vitest integration tests against `jdsheets_test` |
 | `npm run test:contract` | TS side of the contracts (token, bridge, storage, mail, validator) |
 | `npm run rust:test` | Rust unit, integration, contract and property tests |
-| `npm run test:e2e` | Playwright against the built app, the real editor and the real Rust service, with fakes for mail |
+| `npm run test:e2e` | Playwright against the built app (`npm run build` and `npm run editor:build` first), the real editor and the real Rust service (release build, started by Playwright), with fakes for mail |
 | `npm run ci:quality` | everything CI runs for TypeScript, in CI order |
 | `npm run rust:ci` | fmt check, clippy `-D warnings`, build, tests |
 
@@ -337,7 +350,13 @@ Runs Caddy, app, worker, collab and Postgres in containers, as in production:
 docker compose -f docker/docker-compose.local.yml --profile full up -d --build
 ```
 
-Open `http://127.0.0.1:47324`.
+Open `http://127.0.0.1:47324`. The containers use `docker/full-stack.env` (development values only). The first build compiles everything and takes a while.
+
+Check the images and the stack (non-root, no compilers, create and save through Caddy):
+
+```bash
+npm run docker:check
+```
 
 Reset local Docker data (destroys local databases and files):
 
@@ -363,6 +382,8 @@ docker compose -f docker/docker-compose.local.yml down -v
 | `editor:build` · `editor:serve` | build GridCraft + patches to `public/editor/`; serve it standalone on 47325 |
 | `vendor:check` | fail if `vendor/gridcraft` differs from the pinned commit |
 | `rust:check` · `rust:build` · `rust:test` · `rust:ci` | Rust checks |
+| `contracts:generate` | rewrite `contracts/*.json` from the TypeScript side (then run both sides' tests) |
+| `docker:full:up` · `docker:full:down` · `docker:check` | the local full stack in Docker |
 | `db:up` · `db:migrate:dev` · `db:migrate:deploy` · `db:test:migrate` · `db:migrate:check` · `db:generate` · `db:reset:dev` | database |
 | `db:sync-rbac` · `db:seed:dev` · `db:test:prepare` · `db:seed:private` | seeds |
 | `admin:reset-super-admin` · `admin:reset-ip-rules` | recovery (Phase 1+) |
@@ -375,7 +396,9 @@ docker compose -f docker/docker-compose.local.yml down -v
 
 | Problem | Fix |
 |:---|:---|
-| `cargo: command not found` | Add `~/.cargo/bin` to `PATH`, then `npm run setup:rust` |
+| `cargo: command not found` | Add `/opt/homebrew/opt/rustup/bin` and `~/.cargo/bin` to `PATH`, then `npm run setup:rust` |
+| trunk fails "downloading release archive … timed out" | Install wasm-bindgen yourself: `npm run setup:rust` (or `cargo +stable install wasm-bindgen-cli --locked --version 0.2.129`) |
+| Pages load but buttons do nothing | A page was prerendered without its CSP nonce; the root layout must stay `force-dynamic` (Decision 44) |
 | `trunk: command not found` | `npm run setup:rust` (installs the pinned trunk) |
 | The editor page is blank | Run `npm run editor:build`; check `public/editor/build-info.json` exists; check the browser console for a WebGPU/WebGL message |
 | "temporarily unavailable" when saving | The Rust service is not running: `npm run collab:dev` (or set `WORKBOOK_VALIDATOR="fake"` for UI-only work) |

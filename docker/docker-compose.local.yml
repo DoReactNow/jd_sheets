@@ -1,0 +1,73 @@
+# Local development (Decision 34, local_setup.md Sections 4 and 10).
+#   Everyday:   docker compose -f docker/docker-compose.local.yml up -d db
+#   Full stack: docker compose -f docker/docker-compose.local.yml --profile full up -d --build
+name: jdsheets
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: jdsheets_local_db
+    environment:
+      POSTGRES_USER: jdsheets
+      POSTGRES_PASSWORD: jdsheets
+      POSTGRES_DB: jdsheets_dev
+    ports:
+      - "127.0.0.1:47322:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jdsheets -d jdsheets_dev"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # --- Full stack (profile "full"), the same images as production -------------------------
+  migrator:
+    profiles: ["full"]
+    build: { context: .., dockerfile: docker/Dockerfile, target: migrator }
+    env_file: full-stack.env
+    depends_on:
+      db: { condition: service_healthy }
+
+  collab:
+    profiles: ["full"]
+    build: { context: .., dockerfile: docker/Dockerfile, target: collab }
+    env_file: full-stack.env
+
+  app:
+    profiles: ["full"]
+    build: { context: .., dockerfile: docker/Dockerfile, target: app }
+    env_file: full-stack.env
+    volumes:
+      - workbooks:/data/workbooks
+    depends_on:
+      migrator: { condition: service_completed_successfully }
+      collab: { condition: service_healthy }
+
+  worker:
+    profiles: ["full"]
+    build: { context: .., dockerfile: docker/Dockerfile, target: worker }
+    env_file: full-stack.env
+    volumes:
+      - workbooks:/data/workbooks
+    depends_on:
+      migrator: { condition: service_completed_successfully }
+
+  caddy:
+    profiles: ["full"]
+    image: caddy:2.10-alpine
+    ports:
+      - "127.0.0.1:47324:80"
+    environment:
+      SITE_ADDRESS: ":80"
+      EDGE_ALLOWED_CIDRS: "0.0.0.0/0 ::/0"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./blocked:/srv/blocked:ro
+    depends_on:
+      app: { condition: service_healthy }
+
+volumes:
+  db-data:
+  workbooks:

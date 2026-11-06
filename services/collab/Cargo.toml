@@ -1,0 +1,57 @@
+# The JD Sheets engine and collaboration service (Decisions 5, 10, 11, 22).
+# The ONLY code that depends on GridCraft's engine (src/engine/). Its own Cargo workspace;
+# GridCraft is a path dependency on the vendored, never-edited source.
+[package]
+name = "jd-collab"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+license = "UNLICENSED"
+
+[workspace]
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "jd-collab"
+path = "src/main.rs"
+
+[dependencies]
+# GridCraft (vendored, pinned; only src/engine/ may name these crates)
+gridcraft-engine = { path = "../../vendor/gridcraft/crates/engine" }
+gridcraft-model = { path = "../../vendor/gridcraft/crates/model" }
+gridcraft-core = { path = "../../vendor/gridcraft/crates/core" }
+gridcraft-xlsx = { path = "../../vendor/gridcraft/crates/xlsx" }
+# Same zip major as GridCraft, for the archive pre-checks.
+zip = { version = "3", default-features = false, features = ["deflate"] }
+
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "time"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+jsonwebtoken = { version = "9", default-features = false }
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+gridcraft-xlsx = { path = "../../vendor/gridcraft/crates/xlsx", features = ["test-support"] }
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
+proptest = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+
+[profile.release]
+debug = false

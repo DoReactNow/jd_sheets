@@ -1,0 +1,7 @@
+# Pinned to GridCraft's minimum supported Rust (vendor/gridcraft/Cargo.toml rust-version).
+# Bump together with the GridCraft submodule when it raises its minimum.
+[toolchain]
+channel = "1.95.0"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"

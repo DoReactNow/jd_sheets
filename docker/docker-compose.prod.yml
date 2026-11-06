@@ -1,0 +1,84 @@
+# Production on the Hostinger VPS (Decisions 34, 37). Run from the repository root:
+#   docker compose --env-file .env.production -f docker/docker-compose.prod.yml up -d --build
+# Only Caddy publishes ports. Containers reach each other by service name.
+name: jdsheets
+
+x-app-env: &app-env
+  env_file: ../.env.production
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: jdsheets
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}
+      POSTGRES_DB: jdsheets
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jdsheets -d jdsheets"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrator:
+    <<: *app-env
+    restart: "no"
+    build: { context: .., dockerfile: docker/Dockerfile, target: migrator }
+    depends_on:
+      db: { condition: service_healthy }
+
+  collab:
+    <<: *app-env
+    build: { context: .., dockerfile: docker/Dockerfile, target: collab }
+    read_only: true
+    mem_limit: 6g
+
+  app:
+    <<: *app-env
+    build: { context: .., dockerfile: docker/Dockerfile, target: app }
+    read_only: true
+    tmpfs:
+      - /app/.next/cache
+      - /tmp
+    volumes:
+      - workbooks:/data/workbooks
+    depends_on:
+      migrator: { condition: service_completed_successfully }
+      collab: { condition: service_healthy }
+
+  worker:
+    <<: *app-env
+    build: { context: .., dockerfile: docker/Dockerfile, target: worker }
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - workbooks:/data/workbooks
+    depends_on:
+      migrator: { condition: service_completed_successfully }
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS (the domain) in .env.production}
+      EDGE_ALLOWED_CIDRS: ${EDGE_ALLOWED_CIDRS:?set EDGE_ALLOWED_CIDRS in .env.production}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./blocked:/srv/blocked:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      app: { condition: service_healthy }
+
+volumes:
+  db-data:
+  workbooks:
+  caddy-data:
+  caddy-config:

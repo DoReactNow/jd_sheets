@@ -96,7 +96,7 @@ JD Sheets is JD Fusion's own spreadsheet in the browser.
                                      │ HTTPS
                                      ▼
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ CADDY (edge)  TLS · EDGE_ALLOWED_CIDRS · /editor/ static files · proxy   │
+│ CADDY (edge)  TLS · EDGE_ALLOWED_CIDRS · compression · reverse proxy    │
 └───────────────┬───────────────────────────────┬──────────────────────────┘
                 │ /, /api/*                     │ /collab/* (WebSocket, Phase 3)
                 ▼                               ▼
@@ -159,8 +159,8 @@ jd-sheets/
 ├── golden/                      # golden workbooks for upgrade tests (no real company data)
 ├── services/collab/             # Rust service (own Cargo workspace)
 │   ├── Cargo.toml  rust-toolchain.toml
-│   └── src/ main.rs config.rs error.rs clock.rs token.rs ip.rs
-│            engine/ (the only gridcraft-engine user)  http/  ws/ (Phase 3)  ops/ (Phase 3)
+│   └── src/ main.rs lib.rs config.rs error.rs clock.rs token.rs ip.rs http.rs
+│            engine/ (the only gridcraft-engine user)   ws/, ops/, store/ (Phase 3)
 ├── scripts/
 │   ├── editor-build.mjs         # copy submodule → .build/gridcraft, apply patches, trunk build → public/editor
 │   └── ...
@@ -208,8 +208,10 @@ jd-sheets/
 |:---|:---|:---|:---|
 | `gridcraft:ready` | editor → page | Editor is listening | 0 |
 | `gridcraft:open { name, bytes }` | page → editor | After `ready`, with the current version's bytes | 0 |
-| `gridcraft:save { name, saveAs, bytes }` | editor → page | User saved; page `PUT`s with `If-Match` | 0 |
-| `gridcraft:dirty { dirty }` | editor → page | Unsaved state changed; page shows it and autosaves after a pause (Phase 2) | 0 |
+| `gridcraft:save { name, bytes }` | editor → page | User saved (Ctrl/Cmd+S, File › Save); page `PUT`s `.xlsx` with `If-Match`; other files (PDF export) are downloaded | 0 |
+| `gridcraft:dirty { dirty }` | editor → page | Unsaved state changed; page shows it | 0 |
+| URL `?host=parent&chrome=notitlebar&author=…` | page → editor | On load: host mode, GridCraft's title bar hidden, comment author (Decision 43) | 0 |
+| `gridcraft:saveNow` | page → editor | Ask the editor to save, for autosave (patch 0001, Decision 43) | 2 |
 | `gridcraft:failed { error }` | editor → page | Editor could not start; page shows a friendly message | 0 |
 | URL `?mode=view\|comment\|edit` | page → editor | On load (patch 0001) | 2 |
 | `gridcraft:mode { mode }` | page → editor | Role or lease changed while open (patch 0001) | 2 |
@@ -310,7 +312,7 @@ Phase 2 note: before Phase 3, a Commenter's comment is saved by saving the whole
 
 ## 8. Error Handling
 
-- One catalog (`src/shared/errors/catalog.ts`): `VALIDATION_FAILED`, `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `RATE_LIMITED`, `INVALID_CREDENTIALS`, `ACCOUNT_PENDING`, `ACCOUNT_REJECTED`, `PASSWORD_CHANGE_REQUIRED`, `EMAIL_DOMAIN_NOT_ALLOWED`, `OTP_INVALID`, `OTP_EXPIRED`, `NETWORK_BLOCKED`, `WORKBOOK_TOO_LARGE`, `WORKBOOK_UNREADABLE`, `WORKBOOK_CHANGED`, `WORKBOOK_LOCKED`, `SERVICE_UNAVAILABLE`, `INTERNAL`. New codes are added before use.
+- One catalog (`src/shared/errors/errorCatalog.ts`): `VALIDATION_FAILED`, `REQUEST_TOO_LARGE`, `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `RATE_LIMITED`, `INVALID_CREDENTIALS`, `ACCOUNT_PENDING`, `ACCOUNT_REJECTED`, `PASSWORD_CHANGE_REQUIRED`, `EMAIL_DOMAIN_NOT_ALLOWED`, `OTP_INVALID`, `OTP_EXPIRED`, `NETWORK_BLOCKED`, `WORKBOOK_TOO_LARGE`, `WORKBOOK_UNREADABLE`, `WORKBOOK_CHANGED`, `WORKBOOK_LOCKED`, `SERVICE_UNAVAILABLE`, `INTERNAL`. Codes are added to the catalog when the phase that uses them is built (Phase 0 has `VALIDATION_FAILED`, `UNAUTHENTICATED`, `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `WORKBOOK_CHANGED`, `REQUEST_TOO_LARGE`, `WORKBOOK_TOO_LARGE`, `WORKBOOK_UNREADABLE`, `RATE_LIMITED`, `INTERNAL`, `SERVICE_UNAVAILABLE`).
 - The Rust service returns the same envelope and only these codes.
 - Pages: friendly 404, 403, 500 and "network blocked", each with the support contact.
 

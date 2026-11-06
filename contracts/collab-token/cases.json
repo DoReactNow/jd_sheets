@@ -1,0 +1,90 @@
+{
+  "secret": "contract-fixture-secret-0123456789abcdef",
+  "nowUnix": 1798761600,
+  "cases": [
+    {
+      "name": "valid",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJqZC1zaGVldHMtYXBwIiwiYXVkIjoiamQtc2hlZXRzLWNvbGxhYiIsInN1YiI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBhMSIsInNpZCI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBiMSIsIndiIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGMxIiwicm9sZSI6IkVESVRPUiIsIm93biI6dHJ1ZSwiaXAiOiIyMDMuMC4xMTMuNyIsIm5hbWUiOiJBc2hhIiwiaWF0IjoxNzk4NzYxNjAwLCJleHAiOjE3OTg3NjE5MDAsImp0aSI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBkMSJ9.Yy2T8RXDCq7bzKbXjgq35dkIT0ztOa8mgLmag7E60KU",
+      "connectionIp": "203.0.113.7",
+      "expect": "ok"
+    },
+    {
+      "name": "valid from the IPv4-mapped IPv6 form",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJqZC1zaGVldHMtYXBwIiwiYXVkIjoiamQtc2hlZXRzLWNvbGxhYiIsInN1YiI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBhMSIsInNpZCI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBiMSIsIndiIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGMxIiwicm9sZSI6IkVESVRPUiIsIm93biI6dHJ1ZSwiaXAiOiIyMDMuMC4xMTMuNyIsIm5hbWUiOiJBc2hhIiwiaWF0IjoxNzk4NzYxNjAwLCJleHAiOjE3OTg3NjE5MDAsImp0aSI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBkMSJ9.Yy2T8RXDCq7bzKbXjgq35dkIT0ztOa8mgLmag7E60KU",
+      "connectionIp": "::ffff:203.0.113.7",
+      "expect": "ok"
+    },
+    {
+      "name": "expired within the leeway",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJqZC1zaGVldHMtYXBwIiwiYXVkIjoiamQtc2hlZXRzLWNvbGxhYiIsInN1YiI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBhMSIsInNpZCI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBiMSIsIndiIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGMxIiwicm9sZSI6IkVESVRPUiIsIm93biI6dHJ1ZSwiaXAiOiIyMDMuMC4xMTMuNyIsIm5hbWUiOiJBc2hhIiwiaWF0IjoxNzk4NzYxMjcxLCJleHAiOjE3OTg3NjE1NzEsImp0aSI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBkMSJ9.Kt-hkC8vfNXSy4pLsMY6XUUEYshu9rW55uX7DF-ASCU",
+      "connectionIp": "203.0.113.7",
+      "expect": "ok"
+    },
+    {
+      "name": "expired beyond the leeway",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJqZC1zaGVldHMtYXBwIiwiYXVkIjoiamQtc2hlZXRzLWNvbGxhYiIsInN1YiI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBhMSIsInNpZCI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBiMSIsIndiIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGMxIiwicm9sZSI6IkVESVRPUiIsIm93biI6dHJ1ZSwiaXAiOiIyMDMuMC4xMTMuNyIsIm5hbWUiOiJBc2hhIiwiaWF0IjoxNzk4NzYxMjY5LCJleHAiOjE3OTg3NjE1NjksImp0aSI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBkMSJ9.s2eETNSE2tX7JMnB7xbBHSGlv6WftOsZ4YVyAMJdM2g",
+      "connectionIp": "203.0.113.7",
+      "expect": "expired"
+    },
+    {
+      "name": "issued in the future",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJqZC1zaGVldHMtYXBwIiwiYXVkIjoiamQtc2hlZXRzLWNvbGxhYiIsInN1YiI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBhMSIsInNpZCI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBiMSIsIndiIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGMxIiwicm9sZSI6IkVESVRPUiIsIm93biI6dHJ1ZSwiaXAiOiIyMDMuMC4xMTMuNyIsIm5hbWUiOiJBc2hhIiwiaWF0IjoxNzk4NzYxNjkwLCJleHAiOjE3OTg3NjE5MzAsImp0aSI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBkMSJ9.HImJ1ByyFvnEOTM8NfFxwrMzgLGfJYVuzkiT3g74kNI",
+      "connectionIp": "203.0.113.7",
+      "expect": "not_yet_valid"
+    },
+    {
+      "name": "wrong audience",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJqZC1zaGVldHMtYXBwIiwiYXVkIjoic29tZW9uZS1lbHNlIiwic3ViIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGExIiwic2lkIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGIxIiwid2IiOiIwMTkwZjFlMi0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwYzEiLCJyb2xlIjoiRURJVE9SIiwib3duIjp0cnVlLCJpcCI6IjIwMy4wLjExMy43IiwibmFtZSI6IkFzaGEiLCJpYXQiOjE3OTg3NjE2MDAsImV4cCI6MTc5ODc2MTkwMCwianRpIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGQxIn0.ijjYXYq-ON4QJKSeJhm1t5A6StzjN7VW41AT1GPpiZw",
+      "connectionIp": "203.0.113.7",
+      "expect": "invalid"
+    },
+    {
+      "name": "wrong issuer",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzb21lb25lLWVsc2UiLCJhdWQiOiJqZC1zaGVldHMtY29sbGFiIiwic3ViIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGExIiwic2lkIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGIxIiwid2IiOiIwMTkwZjFlMi0wMDAwLTcwMDAtODAwMC0wMDAwMDAwMDAwYzEiLCJyb2xlIjoiRURJVE9SIiwib3duIjp0cnVlLCJpcCI6IjIwMy4wLjExMy43IiwibmFtZSI6IkFzaGEiLCJpYXQiOjE3OTg3NjE2MDAsImV4cCI6MTc5ODc2MTkwMCwianRpIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGQxIn0.grnWg2X6Y_uzwIzxJym-1tCHanfGUiG4XJxNpyLECZ4",
+      "connectionIp": "203.0.113.7",
+      "expect": "invalid"
+    },
+    {
+      "name": "wrong signature",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJqZC1zaGVldHMtYXBwIiwiYXVkIjoiamQtc2hlZXRzLWNvbGxhYiIsInN1YiI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBhMSIsInNpZCI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBiMSIsIndiIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGMxIiwicm9sZSI6IkVESVRPUiIsIm93biI6dHJ1ZSwiaXAiOiIyMDMuMC4xMTMuNyIsIm5hbWUiOiJBc2hhIiwiaWF0IjoxNzk4NzYxNjAwLCJleHAiOjE3OTg3NjE5MDAsImp0aSI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBkMSJ9.NWjY9H0opuFi90cSeb4veREwDPscpvfP36trDLWpXDU",
+      "connectionIp": "203.0.113.7",
+      "expect": "invalid"
+    },
+    {
+      "name": "unsigned (alg none)",
+      "token": "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJpc3MiOiJqZC1zaGVldHMtYXBwIiwiYXVkIjoiamQtc2hlZXRzLWNvbGxhYiIsInN1YiI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBhMSIsInNpZCI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBiMSIsIndiIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGMxIiwicm9sZSI6IkVESVRPUiIsIm93biI6dHJ1ZSwiaXAiOiIyMDMuMC4xMTMuNyIsIm5hbWUiOiJBc2hhIiwiaWF0IjoxNzk4NzYxNjAwLCJleHAiOjE3OTg3NjE5MDAsImp0aSI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBkMSJ9.",
+      "connectionIp": "203.0.113.7",
+      "expect": "invalid"
+    },
+    {
+      "name": "connection from another IP",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJqZC1zaGVldHMtYXBwIiwiYXVkIjoiamQtc2hlZXRzLWNvbGxhYiIsInN1YiI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBhMSIsInNpZCI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBiMSIsIndiIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGMxIiwicm9sZSI6IkVESVRPUiIsIm93biI6dHJ1ZSwiaXAiOiIyMDMuMC4xMTMuNyIsIm5hbWUiOiJBc2hhIiwiaWF0IjoxNzk4NzYxNjAwLCJleHAiOjE3OTg3NjE5MDAsImp0aSI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBkMSJ9.Yy2T8RXDCq7bzKbXjgq35dkIT0ztOa8mgLmag7E60KU",
+      "connectionIp": "198.51.100.1",
+      "expect": "ip_mismatch"
+    },
+    {
+      "name": "unknown role",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJqZC1zaGVldHMtYXBwIiwiYXVkIjoiamQtc2hlZXRzLWNvbGxhYiIsInN1YiI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBhMSIsInNpZCI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBiMSIsIndiIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGMxIiwicm9sZSI6Ik9XTkVSIiwib3duIjp0cnVlLCJpcCI6IjIwMy4wLjExMy43IiwibmFtZSI6IkFzaGEiLCJpYXQiOjE3OTg3NjE2MDAsImV4cCI6MTc5ODc2MTkwMCwianRpIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGQxIn0.3jCqIsD44jv0kx5uj9nqinFIdlUrJHWkzBkQ3ooGAgo",
+      "connectionIp": "203.0.113.7",
+      "expect": "invalid"
+    },
+    {
+      "name": "missing claim",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJqZC1zaGVldHMtYXBwIiwiYXVkIjoiamQtc2hlZXRzLWNvbGxhYiIsInN1YiI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBhMSIsIndiIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGMxIiwicm9sZSI6IkVESVRPUiIsIm93biI6dHJ1ZSwiaXAiOiIyMDMuMC4xMTMuNyIsIm5hbWUiOiJBc2hhIiwiaWF0IjoxNzk4NzYxNjAwLCJleHAiOjE3OTg3NjE5MDAsImp0aSI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBkMSJ9.MGl66ZvhZQozBe_PzGTzMz8EqcYVxJFc4SZLmcrCNto",
+      "connectionIp": "203.0.113.7",
+      "expect": "invalid"
+    },
+    {
+      "name": "lifetime longer than allowed",
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJqZC1zaGVldHMtYXBwIiwiYXVkIjoiamQtc2hlZXRzLWNvbGxhYiIsInN1YiI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBhMSIsInNpZCI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBiMSIsIndiIjoiMDE5MGYxZTItMDAwMC03MDAwLTgwMDAtMDAwMDAwMDAwMGMxIiwicm9sZSI6IkVESVRPUiIsIm93biI6dHJ1ZSwiaXAiOiIyMDMuMC4xMTMuNyIsIm5hbWUiOiJBc2hhIiwiaWF0IjoxNzk4NzYxNjAwLCJleHAiOjE3OTg3NjUyMDAsImp0aSI6IjAxOTBmMWUyLTAwMDAtNzAwMC04MDAwLTAwMDAwMDAwMDBkMSJ9.sZCxG1FXoGm4pfRyYhr9L2fzh8wyNSvsmD9T3c44flc",
+      "connectionIp": "203.0.113.7",
+      "expect": "invalid"
+    },
+    {
+      "name": "malformed token",
+      "token": "not.a.token",
+      "connectionIp": "203.0.113.7",
+      "expect": "invalid"
+    }
+  ]
+}

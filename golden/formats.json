@@ -1,0 +1,22 @@
+{
+  "commands": [
+    ["cell.set", { "cell": "A1", "input": "1234567.891" }],
+    ["home.numberFormat", { "range": "A1", "code": "#,##0.00" }],
+    ["cell.set", { "cell": "A2", "input": "0.256" }],
+    ["home.numberFormat", { "range": "A2", "code": "0.0%" }],
+    ["cell.set", { "cell": "A3", "input": "46388" }],
+    ["home.numberFormat", { "range": "A3", "code": "yyyy-mm-dd" }],
+    ["cell.set", { "cell": "A4", "input": "Header" }],
+    ["home.bold", { "range": "A4", "on": true }],
+    ["home.fillColor", { "range": "A4", "color": "#FFFF00" }],
+    ["cell.set", { "cell": "A5", "input": "Merged" }],
+    ["home.mergeCells", { "range": "A5:C5" }]
+  ],
+  "expect": {
+    "Sheet1!A1": "1,234,567.89",
+    "Sheet1!A2": "25.6%",
+    "Sheet1!A3": "2027-01-01",
+    "Sheet1!A4": "Header",
+    "Sheet1!A5": "Merged"
+  }
+}

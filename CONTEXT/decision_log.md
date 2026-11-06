@@ -583,17 +583,17 @@ App lists (approval queue, shared with me) refresh on focus and by light polling
 
 ## F. Open decisions
 
-### Decision 38: Open: GridCraft Release to Pin First
+### Decision 38: GridCraft Release to Pin First
 
 **Date:** 2026-11-06
-**Status:** Open (needed by W-001; default: the newest release tag on the day W-001 runs; v0.16.0 was current on 2026-11-06)
+**Status:** Resolved by Decision 42 (v0.16.1, the newest release when W-001 ran)
 
 ---
 
-### Decision 39: Open: Git Repository and GitHub Remote
+### Decision 39: Git Repository and GitHub Remote
 
 **Date:** 2026-11-06
-**Status:** Open (needed by W-001 for git, and W-015 for CI). The folder is not a git repository yet. Questions: repository name, owner (personal or organisation), private, default branch `main`.
+**Status:** Resolved (owner, 2026-11-06): `https://github.com/DoReactNow/jd_sheets`, default branch `main`. Phase 0 is built on the branch `phase-0-foundation` and merged by pull request (Decision 36).
 
 ---
 
@@ -612,3 +612,72 @@ App lists (approval queue, shared with me) refresh on focus and by light polling
 **Status:** Open (needed by Phase 4)
 - The domain or subdomain (for example `sheets.jdfusion.in`) and who manages its DNS.
 - Where nightly backups go (for example Google Drive, Backblaze B2, or a second VPS).
+
+---
+
+## G. Settled while building Phase 0
+
+### Decision 42: GridCraft v0.16.1 Pinned; Toolchain Details
+
+**Date:** 2026-11-06
+**Status:** Accepted (resolves Decision 38)
+
+#### Decision
+- `vendor/gridcraft` is pinned to **v0.16.1** (commit `e581bc95b2a1`), recorded in `vendor/GRIDCRAFT_VERSION`.
+- The Rust toolchain is pinned to **1.95.0** (GridCraft's `rust-version`) in `services/collab/rust-toolchain.toml`; the editor is also compiled with it (`RUSTUP_TOOLCHAIN`).
+- **trunk 0.22.1** needs a newer compiler (1.96.1+) to build itself, so it is installed with the stable toolchain (`npm run setup:rust`). Only the tool, not our code, uses the newer compiler.
+- **wasm-bindgen-cli 0.2.129** (the exact version in GridCraft's lockfile) is installed locally and in CI, because trunk's own download of it timed out on the first build.
+- The Rust service is its own Cargo workspace with **path dependencies** on the vendored crates (`engine`, `model`, `core`, `xlsx`); Cargo resolves GridCraft's inherited workspace fields. Its `Cargo.lock` was seeded from GridCraft's, so shared dependencies stay at the versions upstream tested.
+- First editor build: about 4 minutes cold, 42 seconds warm, on the owner's Mac. The WebAssembly file is about 24 MB uncompressed (Caddy compresses it).
+
+---
+
+### Decision 43: Editor Embedding Details at v0.16.1
+
+**Date:** 2026-11-06
+**Status:** Accepted (amends Decision 7 and project_data.md 4.6)
+
+#### Context (read from `apps/gridcraft-web/src/host.rs` at v0.16.1)
+The pinned release's bridge is simpler than the later `craft-web-host` version the planning notes described: `gridcraft:save` carries `{ name, bytes }` (no `saveAs`), and there is no message by which the page can ask the editor to save.
+
+#### Decision
+- The editor is built with relative URLs (`--public-url ./`) and served by the **Next.js app** from `public/editor/` in every environment, so one set of headers applies (`next.config.ts`). Caddy only proxies. (Amends Decision 7 and Decision 34, which had Caddy serving the files.)
+- The editor's only inline script (trunk's loader) is allowed by its **SHA-384 hash**, recorded in `public/editor/build-info.json` at build time; the editor's policy allows `'wasm-unsafe-eval'` and only our own pages may frame it.
+- The iframe URL is `/editor/index.html?host=parent&chrome=notitlebar&author=<display name>`. GridCraft's own title bar is hidden (our top bar replaces it); its File tab stays, for Save and Export.
+- **Saving is the person's Save** (Ctrl/Cmd+S or File › Save). Files other than `.xlsx` that the editor hands over (PDF exports) are downloaded by the page.
+- **Autosave (Phase 2) needs patch 0001 to add a "save now" message** from the page to the editor, alongside the access mode. Logged here so Phase 2 plans for it.
+
+---
+
+### Decision 44: Phase 0 Implementation Details
+
+**Date:** 2026-11-06
+**Status:** Accepted
+
+#### Decision
+- **Kernel reuse:** the Explore Hills shared kernel (errors, `route()`, time, logger, jobs, storage, tests setup, scans) was copied and adapted, not rewritten.
+- **Workbook roles in Phase 0:** the resolver is the real owner rule (the owner has `OWNER`, nobody else has a role), not a development shortcut. The development principal simply owns what it creates. Phase 2 replaces it with the `sharing` resolver.
+- **Error codes:** a stale save answers `WORKBOOK_CHANGED` (409), with its own friendly message offering "reload" or "save as a copy". `REQUEST_TOO_LARGE` (413) was added for oversized non-workbook bodies.
+- **Saving:** the file is written first; then, in one transaction that locks the workbook row (`SELECT … FOR UPDATE`), the version row is inserted and the pointer moved only if the base is still current. A unique (`workbook`, `number`) index is the second guard. Refused saves leave an orphan file, removed weekly by `workbooks.purgeOrphanFiles` after 24 hours.
+- **Pages render per request** (`dynamic = "force-dynamic"` in the root layout), so each page gets its own CSP nonce; a prerendered page cannot carry one and its scripts would be blocked.
+- **Validation:** the Rust service refuses archives declaring more than 1 GiB uncompressed or more than 20,000 entries before GridCraft reads them, runs GridCraft on the blocking pool with a 15-second limit, and turns a GridCraft panic into "unreadable".
+- **The Rust service has no database access yet**; sqlx arrives with `collab_ops` in Phase 3.
+- **Golden workbooks** are written by the pinned GridCraft from command specs (`golden/*.json`) and committed; tests open them, compare values, save and reopen.
+- **Phase 0 E2E** runs the built app with `DEV_PRINCIPAL=on` (allowed under `APP_ENV=test`); Phase 1 replaces it with real test sign-in. Before typing into the canvas, E2E sends harmless keys (Escape, Ctrl+Home) because the first key after focus can be swallowed.
+- **Docker:** one `docker/Dockerfile` with targets `migrator`, `app`, `worker`, `collab`; a `tools` stage builds trunk and wasm-bindgen with Rust 1.99.1. `npm run docker:check` proves non-root images without compilers and a create-and-save through Caddy.
+
+---
+
+### Decision 45: Phase 0 Acceptance (Fresh-Clone Drill) Findings
+
+**Date:** 2026-11-06
+**Status:** Accepted
+
+#### Findings and fixes
+- **`.gitignore` hid source code.** The pattern `storage/` also matched `src/shared/storage/`, so that folder never reached GitHub; the local checkout passed every test because the files existed on disk. Fixed: build and data folders are anchored to the root (`/storage/`, `/dist/` …). The drill (clone from GitHub, then every check) is the only test that can catch this, so it stays part of every phase's acceptance.
+- **Cargo's built-in git client failed with an SSL error inside Docker** while fetching GridCraft's git dependencies. Fixed with `CARGO_NET_GIT_FETCH_WITH_CLI=true` in the Docker build stages.
+- **The Docker editor build has no submodule git metadata**, so `scripts/editor-build.mjs` has a copy mode (`EDITOR_BUILD_SOURCE=copy`); CI's vendor check still guarantees the source is the pinned commit.
+- **`npm run docker:check` stopped the everyday database** along with the full stack. Fixed: it stops only the full-stack services.
+
+#### Result
+From a fresh clone of the pull-request branch: lint, typecheck, builds, 232 unit, 50 integration, 33 Rust (including golden workbooks and contracts), 24 TypeScript contract and 4 E2E tests all passed. Docker: all four images build, run as non-root without compilers, and a workbook is created and saved through Caddy (`npm run docker:check`).

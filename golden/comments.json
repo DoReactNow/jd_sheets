@@ -1,0 +1,10 @@
+{
+  "commands": [
+    ["cell.set", { "cell": "B2", "input": "100" }],
+    ["review.newComment", { "cell": "B2", "text": "Is this the revised quote?", "author": "Meera" }],
+    ["review.newNote", { "cell": "C3", "text": "Remember to update" }]
+  ],
+  "expect": {
+    "Sheet1!B2": "100"
+  }
+}

@@ -2,16 +2,14 @@
 // request's policy and puts it on its own scripts. API routes and the static editor files stay out;
 // their fixed headers come from next.config.ts. Phase 1 adds the IP rules here (Decision 18).
 import { NextResponse, type NextRequest } from "next/server";
+import { getEnv } from "@/shared/config/env";
 import { createNonce, pageContentSecurityPolicy } from "@/shared/http/securityHeaders";
 
 /** The live editing WebSocket's origin (Phase 3): COLLAB_PUBLIC_URL, or COLLAB_URL as ws://. */
 function liveOrigin(): string[] {
-  // The proxy runs before the app's env module; it only reads these two addresses.
-  // eslint-disable-next-line no-restricted-properties
-  const configured =
-    process.env.COLLAB_PUBLIC_URL ?? process.env.COLLAB_URL?.replace(/^http/, "ws");
-  if (!configured) return [];
   try {
+    const env = getEnv();
+    const configured = env.COLLAB_PUBLIC_URL ?? env.COLLAB_URL;
     return [new URL(configured).origin.replace(/^http/, "ws")];
   } catch {
     return [];

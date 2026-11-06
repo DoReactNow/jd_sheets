@@ -568,11 +568,11 @@ These apply to every endpoint, screen, job, table and Rust handler. A plan does 
 
 | ID | Question | Phase |
 |:---|:---|:---|
-| TQ-01 | Group deletion when shares use it: refuse, or remove its shares after a warning (P2-GROUP-03)? | 2 |
-| TQ-02 | Should link-only access show in "Shared with me" before the first open (P2-LINK-03)? | 2 |
-| TQ-03 | After an ownership transfer, does the old owner keep Editor access (P2-ADMINWB-02)? | 2 |
-| TQ-04 | Same person, two tabs, one lease: block the second tab or move the lease (P2-LEASE-08)? | 2 |
-| TQ-05 | Autosave timings (P2-SAVE-01) | 2 |
+| TQ-01 | Group deletion when shares use it: refuse, or remove its shares after a warning (P2-GROUP-03)? | 2 (answered: Decision 52) |
+| TQ-02 | Should link-only access show in "Shared with me" before the first open (P2-LINK-03)? | 2 (answered: Decision 52) |
+| TQ-03 | After an ownership transfer, does the old owner keep Editor access (P2-ADMINWB-02)? | 2 (answered: Decision 52) |
+| TQ-04 | Same person, two tabs, one lease: block the second tab or move the lease (P2-LEASE-08)? | 2 (answered: Decision 52) |
+| TQ-05 | Autosave timings (P2-SAVE-01) | 2 (answered: Decision 52) |
 | TQ-06 | Undo with live co-editing: own changes only (recommended), or everything (P3-PATCH-04)? | 3 |
 | TQ-07 | Rebasing rule per command type (P3-REBASE-03) | 3 |
 | TQ-08 | Maximum editors per workbook (P3-PERF-03) | 3 |

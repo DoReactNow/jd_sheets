@@ -9,7 +9,9 @@ require_root
 
 TAG="$(deployed_tag)"
 [ -n "$TAG" ] || fail "nothing is deployed yet; run ops/deploy.sh <tag> first"
-run() { compose_for "$TAG" --profile migrate run --rm "$@" migrator npx tsx "${CMD[@]}"; }
+# -T: these commands never read the terminal, so they cannot swallow what is typed next.
+run() { compose_for "$TAG" --profile migrate run --rm -T "$@" migrator npx tsx "${CMD[@]}" </dev/null; }
+run_interactive() { compose_for "$TAG" --profile migrate run --rm -it migrator npx tsx "${CMD[@]}"; }
 
 case "${1:-}" in
   sync-rbac)
@@ -36,7 +38,7 @@ case "${1:-}" in
   reset-super-admin)
     [ -n "${2:-}" ] || fail "usage: admin.sh reset-super-admin <email>"
     CMD=(src/modules/identity/identity.cli.ts reset-super-admin --email "$2")
-    run -it
+    run_interactive
     ;;
   reset-ip-rules)
     [ -n "${2:-}" ] || fail "usage: admin.sh reset-ip-rules <address or range>"

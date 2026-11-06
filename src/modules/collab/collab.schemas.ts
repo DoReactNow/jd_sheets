@@ -19,6 +19,8 @@ export const appendOpsInput = z.object({
     .max(500),
 });
 
+export const heartbeatInput = z.object({ editing: z.boolean() });
+
 /** Headers of a snapshot upload: the base version and the contributors. */
 export const snapshotHeaders = z.object({
   baseVersionId: uuid,

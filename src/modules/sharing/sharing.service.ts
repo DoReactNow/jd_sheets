@@ -4,6 +4,7 @@
 import { recordAudit } from "@/modules/audit";
 import { groupsService } from "@/modules/identity";
 import { workbookRecords } from "@/modules/workbooks";
+import { notifyAccessChanged } from "@/shared/collab/client";
 import { AppError } from "@/shared/errors/AppError";
 import type { Principal } from "@/shared/rbac/principal";
 import { highestRole, type WorkbookRole } from "@/shared/rbac/workbookAccess";
@@ -112,34 +113,36 @@ export function createSharingService({ clock = systemClock }: { clock?: Clock } 
         throw new AppError("SHARE_TARGET_INVALID");
       }
       const target = type === "user" ? { userId: id } : { groupId: id };
-      return sharingRepository.transaction(async (tx) => {
-        const existing = await sharingRepository.findGrantFor(tx, workbookId, target);
-        let row: GrantRow;
-        if (existing) {
-          row = await sharingRepository.updateGrantRole(tx, existing.id, input.role);
-          await audit(tx, actor, meta, "share.changed", workbookId, {
-            grantId: row.id,
-            targetType: type,
-            targetId: id,
-            from: existing.role,
-            to: input.role,
-          });
-        } else {
-          row = await sharingRepository.createGrant(tx, {
-            workbookId,
-            ...target,
-            role: input.role,
-            createdById: actor.userId,
-          });
-          await audit(tx, actor, meta, "share.granted", workbookId, {
-            grantId: row.id,
-            targetType: type,
-            targetId: id,
-            role: input.role,
-          });
-        }
-        return toGrantDto(row);
-      });
+      return sharingRepository
+        .transaction(async (tx) => {
+          const existing = await sharingRepository.findGrantFor(tx, workbookId, target);
+          let row: GrantRow;
+          if (existing) {
+            row = await sharingRepository.updateGrantRole(tx, existing.id, input.role);
+            await audit(tx, actor, meta, "share.changed", workbookId, {
+              grantId: row.id,
+              targetType: type,
+              targetId: id,
+              from: existing.role,
+              to: input.role,
+            });
+          } else {
+            row = await sharingRepository.createGrant(tx, {
+              workbookId,
+              ...target,
+              role: input.role,
+              createdById: actor.userId,
+            });
+            await audit(tx, actor, meta, "share.granted", workbookId, {
+              grantId: row.id,
+              targetType: type,
+              targetId: id,
+              role: input.role,
+            });
+          }
+          return toGrantDto(row);
+        })
+        .finally(() => notifyAccessChanged({ workbookId }));
     },
 
     async changeGrant(
@@ -150,17 +153,19 @@ export function createSharingService({ clock = systemClock }: { clock?: Clock } 
       meta: Meta,
     ): Promise<GrantDto> {
       await settingsOrNotFound(workbookId);
-      return sharingRepository.transaction(async (tx) => {
-        const existing = await sharingRepository.findGrant(tx, workbookId, grantId);
-        if (!existing) throw new AppError("NOT_FOUND");
-        const row = await sharingRepository.updateGrantRole(tx, grantId, role);
-        await audit(tx, actor, meta, "share.changed", workbookId, {
-          grantId,
-          from: existing.role,
-          to: role,
-        });
-        return toGrantDto(row);
-      });
+      return sharingRepository
+        .transaction(async (tx) => {
+          const existing = await sharingRepository.findGrant(tx, workbookId, grantId);
+          if (!existing) throw new AppError("NOT_FOUND");
+          const row = await sharingRepository.updateGrantRole(tx, grantId, role);
+          await audit(tx, actor, meta, "share.changed", workbookId, {
+            grantId,
+            from: existing.role,
+            to: role,
+          });
+          return toGrantDto(row);
+        })
+        .finally(() => notifyAccessChanged({ workbookId }));
     },
 
     async removeGrant(actor: Principal, workbookId: string, grantId: string, meta: Meta) {
@@ -176,6 +181,7 @@ export function createSharingService({ clock = systemClock }: { clock?: Clock } 
           targetId: existing.user?.id ?? existing.group?.id,
         });
       });
+      notifyAccessChanged({ workbookId });
     },
 
     /** The company link: a role for any active colleague who opens it, or off (P2-LINK-01/02). */
@@ -188,6 +194,7 @@ export function createSharingService({ clock = systemClock }: { clock?: Clock } 
           to: role,
         });
       });
+      notifyAccessChanged({ workbookId });
     },
 
     async setDownload(actor: Principal, workbookId: string, allow: boolean, meta: Meta) {
@@ -227,6 +234,7 @@ export function createSharingService({ clock = systemClock }: { clock?: Clock } 
         const removed = await sharingRepository.deleteGrantsForGroup(tx, groupId);
         await groupsService.deleteInTx(tx, actor, groupId, meta, { sharesRemoved: removed });
       });
+      for (const { workbookId } of shared) notifyAccessChanged({ workbookId });
     },
 
     /**
@@ -255,6 +263,7 @@ export function createSharingService({ clock = systemClock }: { clock?: Clock } 
           to: newOwnerId,
         });
       });
+      notifyAccessChanged({ workbookId });
     },
   };
 }

@@ -435,6 +435,22 @@ export const leaseRepository = {
     return rows.length === 1;
   },
 
+  /** True while live editing goes on in the workbook (P3-FALLBACK-02). */
+  async liveNow(workbookId: string, now: Date): Promise<boolean> {
+    const row = await getPrisma().workbook.findUnique({
+      where: { id: workbookId },
+      select: { liveUntil: true },
+    });
+    return row?.liveUntil != null && row.liveUntil > now;
+  },
+
+  async setLiveUntil(workbookId: string, until: Date | null): Promise<void> {
+    await getPrisma().workbook.updateMany({
+      where: { id: workbookId },
+      data: { liveUntil: until },
+    });
+  },
+
   /** The current, unexpired lease, or null. */
   async current(workbookId: string, now: Date): Promise<LeaseRow | null> {
     const row = await getPrisma().editLease.findFirst({

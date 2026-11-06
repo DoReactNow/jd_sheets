@@ -5,6 +5,7 @@
 import type { Readable } from "node:stream";
 import { findAuditEvent, recordAudit } from "@/modules/audit";
 import { APP_CONFIG } from "@/shared/config/appConfig";
+import { notifyAccessChanged } from "@/shared/collab/client";
 import { AppError } from "@/shared/errors/AppError";
 import type { Logger } from "@/shared/logger";
 import type { Principal } from "@/shared/rbac/principal";
@@ -99,6 +100,7 @@ export function createLifecycleService(deps: LifecycleDeps) {
           ip: meta.ip,
         });
       });
+      notifyAccessChanged({ workbookId });
     },
 
     /** Restores from Trash with its shares as they were (P2-TRASH-02). */

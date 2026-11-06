@@ -4,6 +4,7 @@
 import type { Readable } from "node:stream";
 import { recordAudit } from "@/modules/audit";
 import { APP_CONFIG } from "@/shared/config/appConfig";
+import { notifyAccessChanged } from "@/shared/collab/client";
 import { AppError } from "@/shared/errors/AppError";
 import { uuid7 } from "@/shared/ids/uuid7";
 import type { Principal } from "@/shared/rbac/principal";
@@ -136,6 +137,8 @@ export function createHistoryService({ repository, lease, storage, clock }: Hist
               details: { fromVersion: version.number, newVersion: newNumber },
             }),
         );
+        // Everyone editing live loads the restored version (P3-RESTORE-01).
+        notifyAccessChanged({ workbookId, reload: true });
         return {
           versionId: newId,
           number,

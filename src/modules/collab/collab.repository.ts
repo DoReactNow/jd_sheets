@@ -7,14 +7,20 @@ export interface NewOp {
   userId: string;
   clientCommandId: string;
   commandId: string;
-  step: Prisma.InputJsonValue;
+  step: unknown;
 }
 
 export const collabRepository = {
   /** Appends ops in one transaction; an op already stored (a retry) is skipped. */
   async append(workbookId: string, baseVersionId: string, ops: NewOp[]): Promise<number> {
     const result = await getPrisma().collabOp.createMany({
-      data: ops.map((op) => ({ ...op, seq: BigInt(op.seq), workbookId, baseVersionId })),
+      data: ops.map((op) => ({
+        ...op,
+        step: op.step as Prisma.InputJsonValue,
+        seq: BigInt(op.seq),
+        workbookId,
+        baseVersionId,
+      })),
       skipDuplicates: true,
     });
     return result.count;

@@ -142,6 +142,12 @@ async fn serve(state: AppState, workbook_id: String, ip: Option<std::net::IpAddr
         let _ = tx.send(Out::Binary(bytes));
         rooms::send_all(&r, &rooms::presence(&r));
     }
+    // An editor arriving marks the workbook as edited live at once (P3-FALLBACK-02).
+    {
+        let rooms = state.rooms.clone();
+        let room = room.clone();
+        tokio::spawn(async move { rooms.heartbeat(&room).await });
+    }
     // 3. Messages both ways until either side goes.
     let (mut sink, mut stream) = socket.split();
     // A close jumps the queue: a misbehaving connection gets no backlog first (P3-WS-06, -07).
@@ -269,10 +275,13 @@ async fn serve(state: AppState, workbook_id: String, ip: Option<std::net::IpAddr
     drop(tx);
     // Let what is queued (a close frame last) reach the person; a reader that never reads ends it.
     let _ = tokio::time::timeout(Duration::from_secs(30), writer).await;
-    if last_out {
-        let rooms = state.rooms.clone();
-        tokio::spawn(async move { rooms.snapshot(&room).await });
-    }
+    let rooms = state.rooms.clone();
+    tokio::spawn(async move {
+        rooms.heartbeat(&room).await;
+        if last_out {
+            rooms.snapshot(&room).await;
+        }
+    });
 }
 
 /// POST /internal/access-changed `{workbookId?, userId?, reload?}`: a share, role, deactivation or

@@ -8,10 +8,10 @@ import { parseInput } from "@/shared/errors/toErrorResponse";
 import { readBodyLimited } from "@/shared/http/body";
 import { clientIp } from "@/shared/http/clientIp";
 import type { RawResult, RouteContext } from "@/shared/http/route";
-import { appendOpsInput, snapshotHeaders } from "./collab.schemas";
+import { appendOpsInput, heartbeatInput, snapshotHeaders } from "./collab.schemas";
 import { collabService } from "./collab.service";
 
-export const collabSchemas = { appendOps: appendOpsInput };
+export const collabSchemas = { appendOps: appendOpsInput, heartbeat: heartbeatInput };
 
 type Ctx<I = undefined> = RouteContext<I, { id: string }>;
 
@@ -59,6 +59,12 @@ export const collabController = {
       context.input.ops,
     );
     return { data: { stored } };
+  },
+
+  /** POST /api/internal/collab/workbooks/:id/heartbeat (internal): `{editing}` every 30 s. */
+  async heartbeat(context: Ctx<z.output<typeof heartbeatInput>>) {
+    await collabService.heartbeat(context.params.id, context.input.editing);
+    return { data: { ok: true } };
   },
 
   /** POST /api/internal/collab/workbooks/:id/snapshots (internal): body = xlsx bytes. */

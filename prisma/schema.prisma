@@ -67,6 +67,8 @@ model Workbook {
   // Viewers and Commenters may download and export (Phase 2).
   allowDownloadForReaders Boolean           @default(true) @map("allow_download_for_readers")
   trashedAt               DateTime?         @map("trashed_at") @db.Timestamptz(3)
+  /// Live editing is going on until then (the Rust service renews it, P3-FALLBACK-02).
+  liveUntil               DateTime?         @map("live_until") @db.Timestamptz(3)
   trashedById             String?           @map("trashed_by_id") @db.Uuid
   trashedBy               User?             @relation("WorkbookTrashedBy", fields: [trashedById], references: [id], onDelete: Restrict)
   createdAt               DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)

@@ -59,6 +59,8 @@ pub struct Room {
     pub contributors: HashSet<String>,
     pub last_snapshot: Instant,
     pub empty_since: Option<Instant>,
+    /// The app was last told that people are editing live.
+    pub live_marked: bool,
 }
 
 /// Every open room, and how to reach the app.
@@ -120,6 +122,7 @@ impl Rooms {
             contributors: HashSet::new(),
             last_snapshot: Instant::now(),
             empty_since: None,
+            live_marked: false,
         })
     }
 
@@ -190,9 +193,29 @@ impl Rooms {
         }
     }
 
-    /// Every 30 seconds: saves versions that are due, and unloads rooms nobody is in.
+    /// Tells the app whether anyone edits live in this room now (P3-FALLBACK-02).
+    pub async fn heartbeat(&self, room: &Arc<Mutex<Room>>) {
+        let (id, editing, marked) = {
+            let r = room.lock().await;
+            (
+                r.workbook_id.clone(),
+                r.conns.values().any(|c| c.role == Role::Editor),
+                r.live_marked,
+            )
+        };
+        if !editing && !marked {
+            return;
+        }
+        if self.app.heartbeat(&id, editing).await.is_ok() {
+            room.lock().await.live_marked = editing;
+        }
+    }
+
+    /// Every 30 seconds: renews the live marker, saves versions that are due, and unloads rooms
+    /// nobody is in.
     pub async fn tick(&self) {
         for room in self.all().await {
+            self.heartbeat(&room).await;
             let (due, idle, id) = {
                 let r = room.lock().await;
                 let due = r.dirty && (r.last_snapshot.elapsed() >= SNAPSHOT_EVERY || r.conns.is_empty());

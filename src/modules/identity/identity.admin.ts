@@ -1,6 +1,7 @@
 // Account administration (Decisions 12, 15, 16): the approval queue, user management, password
 // resets and the Super Admin protections. Every change is audited in the same transaction.
 import { recordAudit } from "@/modules/audit";
+import { notifyAccessChanged } from "@/shared/collab/client";
 import { AppError } from "@/shared/errors/AppError";
 import { can } from "@/shared/rbac/guard";
 import type { Principal } from "@/shared/rbac/principal";
@@ -266,6 +267,8 @@ export function createAdminService({ clock = systemClock }: { clock?: Clock } = 
           ip: meta.ip,
         });
       });
+      // A deactivated person's live connections close within seconds (P3-WS-04).
+      if (!active) notifyAccessChanged({ userId });
       return this.get(userId);
     },
 

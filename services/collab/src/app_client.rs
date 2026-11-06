@@ -131,6 +131,20 @@ impl AppClient {
         .map(|_| ())
     }
 
+    /// Tells the app whether people are editing live (P3-FALLBACK-02); renewed every 30 seconds.
+    pub async fn heartbeat(&self, workbook_id: &str, editing: bool) -> Result<(), AppError> {
+        Self::check(
+            self.http
+                .post(self.url(&format!("/api/internal/collab/workbooks/{workbook_id}/heartbeat")))
+                .header(INTERNAL_TOKEN_HEADER, &self.token)
+                .json(&json!({ "editing": editing }))
+                .send()
+                .await,
+        )
+        .await
+        .map(|_| ())
+    }
+
     /// Saves a snapshot as a "Live editing" version on top of `base_version_id`; answers the new
     /// version's id. `Status(409)`: another version became current meanwhile (a restore).
     pub async fn snapshot(

@@ -91,6 +91,10 @@ async fn fake_app(shared: Shared) -> String {
         .route("/api/internal/collab/workbooks/{id}/content", get(content))
         .route("/api/internal/collab/workbooks/{id}/ops", post(ops))
         .route("/api/internal/collab/workbooks/{id}/snapshots", post(snapshot))
+        .route(
+            "/api/internal/collab/workbooks/{id}/heartbeat",
+            post(|| async { axum::Json(json!({ "data": { "ok": true } })) }),
+        )
         .with_state(shared);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();

@@ -2,19 +2,20 @@
 // internal routes the Rust service uses to load a workbook, store accepted changes and save
 // "Live editing" versions. The Rust service never touches the database itself.
 import type { Readable } from "node:stream";
-import { workbooksService } from "@/modules/workbooks";
+import { leaseService, workbooksService } from "@/modules/workbooks";
 import { APP_CONFIG } from "@/shared/config/appConfig";
 import { getEnv } from "@/shared/config/env";
 import { AppError } from "@/shared/errors/AppError";
 import type { Principal } from "@/shared/rbac/principal";
 import type { WorkbookRole } from "@/shared/rbac/workbookAccess";
 import { plusDuration, systemClock, toIsoInstant, type Clock } from "@/shared/time";
-import type { Prisma } from "@/generated/prisma/client";
 import { collabRepository } from "./collab.repository";
 import { issueCollabToken } from "./token";
 
 export interface CollabTokenDto {
   token: string;
+  /** Someone holds the one-editor lease: live editing is view-only for now. */
+  heldBy: string | null;
   /** Where the browser opens the WebSocket. */
   url: string;
   expiresAt: string;
@@ -45,11 +46,15 @@ export function createCollabService({ clock = systemClock }: { clock?: Clock } =
       ip: string,
     ): Promise<CollabTokenDto> {
       if (!principal.sessionId) throw new AppError("UNAUTHENTICATED");
+      // Someone holds the one-editor lease (the live service was unreachable for them): live
+      // editing opens view-only until they finish (P3-FALLBACK-02).
+      const holder = await leaseService().holder(workbookId);
+      const leased = holder !== null && (role === "OWNER" || role === "EDITOR");
       const token = await issueCollabToken({
         userId: principal.userId,
         sessionId: principal.sessionId,
         workbookId,
-        role,
+        role: leased ? "VIEWER" : role,
         ip,
         displayName: principal.displayName,
         clock,
@@ -57,6 +62,7 @@ export function createCollabService({ clock = systemClock }: { clock?: Clock } =
       });
       return {
         token,
+        heldBy: leased ? holder.holderName : null,
         url: `${collabPublicUrl()}/collab/${workbookId}`,
         expiresAt: toIsoInstant(
           plusDuration(clock.now(), { seconds: APP_CONFIG.collab.tokenTtlSeconds }),
@@ -100,11 +106,7 @@ export function createCollabService({ clock = systemClock }: { clock?: Clock } =
         step: unknown;
       }>,
     ): Promise<number> {
-      return collabRepository.append(
-        workbookId,
-        baseVersionId,
-        ops.map((op) => ({ ...op, step: op.step as Prisma.InputJsonValue })),
-      );
+      return collabRepository.append(workbookId, baseVersionId, ops);
     },
 
     snapshot(
@@ -114,6 +116,11 @@ export function createCollabService({ clock = systemClock }: { clock?: Clock } =
       contributorIds: string[],
     ) {
       return workbooksService().addLiveSnapshot(workbookId, baseVersionId, bytes, contributorIds);
+    },
+
+    /** The live service: people are editing live now, or no longer (P3-FALLBACK-02). */
+    heartbeat(workbookId: string, editing: boolean): Promise<void> {
+      return leaseService().markLive(workbookId, editing);
     },
 
     /** Nightly: changes no longer built on the current version, older than 7 days. */

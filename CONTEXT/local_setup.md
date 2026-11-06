@@ -246,7 +246,8 @@ docker compose -f docker/docker-compose.local.yml exec db psql -U jdsheets -c '\
 - GridCraft is **our own copy** at `vendor/gridcraft` (Decision 55), based on release v0.16.1 (`vendor/GRIDCRAFT_VERSION` records the starting point). Edit it directly; keep its `LICENSE-MIT`, `LICENSE-APACHE` and `NOTICE` files.
 - Our changes so far: the access modes (`apps/gridcraft-web/src/access.rs`, the `gridcraft:mode` and `gridcraft:saveNow` messages in `host.rs`) and ribbon greying (`Access` in `crates/ui-egui/src/lib.rs`, used in `ribbon.rs`).
 - `npm run editor:build` copies it to `.build/gridcraft`, runs `trunk build --release` with `public_url = "/editor/"`, and writes `public/editor/` with `build-info.json`. Run it again after cloning or changing anything in `vendor/gridcraft`.
-- `npm run editor:test` runs the tests of our GridCraft changes natively (`cargo test -p gridcraft-web`).
+- `npm run editor:test` runs the tests of our GridCraft changes natively (`cargo test -p gridcraft-web`). The live editing rules (Phase 3) are tested in the engine: `cargo test -p gridcraft-engine --lib live::` in `vendor/gridcraft` (with the pinned toolchain).
+- **Live editing (Phase 3)** needs the Rust service running (`npm run dev:all` starts it). The browser connects to `COLLAB_PUBLIC_URL` (default: `COLLAB_URL` as `ws://`); the service calls the app at `APP_INTERNAL_URL` (default: `APP_URL`). Without the service, the editor falls back to one editor at a time.
 - Standalone look at the editor: `npm run editor:serve` → `http://127.0.0.1:47325`.
 
 ## 6. The Rust Service

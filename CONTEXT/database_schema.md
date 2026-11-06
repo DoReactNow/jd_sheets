@@ -281,22 +281,20 @@ Unique (`workbookId`, `userId`) and (`workbookId`, `groupId`).
 | `userId` | uuid, FK (Restrict) | PK part |
 | `firstOpenedAt` | timestamptz | so link-only workbooks can appear in "Shared with me" after the first open |
 
-### 3.15 `collab_ops` (Phase 3, written only by the Rust service)
+### 3.15 `collab_ops` (Phase 3, written by the app on the Rust service's behalf, Decision 58)
 
 | Column | Type | Notes |
 |:---|:---|:---|
-| `workbookId` | uuid, FK → `workbooks_workbooks` (Restrict) | PK part |
-| `seq` | bigint | PK part; gap-free per workbook |
-| `baseVersionId` | uuid, FK → `workbooks_versions` (Restrict) | the version the session was loaded from |
+| `workbookId` | uuid, FK → `workbooks_workbooks` (Cascade) | PK part |
+| `seq` | bigint | PK part; gap-free per workbook, never reused |
+| `baseVersionId` | uuid | the version this change builds on; after a restart the service replays the changes built on the current version |
 | `userId` | uuid, FK → `identity_users` (Restrict) | |
-| `clientCommandId` | uuid | unique per (`workbookId`, `userId`, `clientCommandId`) so retries apply once |
-| `commandId` | text | GridCraft command ID, for example `cell.set` |
-| `params` | jsonb | as applied (after rebasing); never contains secrets |
+| `clientCommandId` | varchar(80) | unique per (`workbookId`, `userId`, `clientCommandId`) so retries apply once |
+| `commandId` | varchar(80) | GridCraft command id, for example `cell.set` |
+| `step` | jsonb | the step as applied (after shifting); never contains secrets |
 | `createdAt` | timestamptz | |
 
-Commands older than the newest snapshot by more than 7 days are pruned.
-
----
+Changes not built on the current version are pruned nightly after 7 days (`collab.pruneOps`). `workbooks_workbooks.liveUntil` (timestamptz, nullable) says live editing is going on (renewed every 30 s by the service); the one-editor lease is refused meanwhile (P3-FALLBACK-02). `workbooks_versions.contributorIds` lists the people in a "Live editing" version.
 
 ## 4. Seeds
 

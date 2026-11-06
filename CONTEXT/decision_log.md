@@ -855,3 +855,44 @@ Because office addresses change, a change can leave everyone outside the allowed
 - A Super Admin's sign-in from outside is always audited (`network.outsideAccess`); their requests from outside are audited at most once per person and address every 10 minutes. Both show on the Network access page. Someone else signing in from outside is audited as `auth.sign_in_refused_network`.
 - Caddy's edge allowlist (`EDGE_ALLOWED_CIDRS`, Decision 46) must therefore allow everything, and the app's network rules do the filtering (Phase 4 sets this up).
 - Built as the first work item of Phase 3 (W-301).
+
+---
+
+### Decision 58: Phase 3 Details Settled While Building
+
+**Date:** 2026-11-06
+**Status:** Accepted (amends Decision 22 and database_schema.md 3.15)
+
+#### Decision
+- **Replay, proven first.** GridCraft's macro recorder already keeps each command with its sheet and selection. Our engine's `live` module captures every change as such a step, and another session replays it exactly. Proven on all 120 commands that change a workbook, including through JSON. Changes:
+  - **Paste** carries its copied cells.
+  - **Toggles** (Bold) are sent with the state they set.
+  - **View-only commands** (selection, sheet tabs, zoom, windows) are never sent.
+- **Where the rules live.** All of these are in our GridCraft's engine (`crates/engine/src/live.rs`) and are tested there with up to 8 simulated editors, random delays and row/column edits:
+  - the editor side (pending changes, rewind and re-apply);
+  - the server side (ordering, roles, comment authors, retries);
+  - the shifting rule (Decision 56: pending changes shift through others' row and column inserts and deletes; a change to deleted cells is refused and its sender resyncs).
+  
+  The Rust service only does networking and storage.
+- **Undo while live** restores this person's changed cells where nobody changed them since, as a normal change everyone receives (`live.setCells`). A structural change (rows, sheets, merges) can't be undone while others edit; a short message says so.
+- **Storage through the app** (amends "written only by the Rust service"). The Rust service never touches the database: it calls the app's internal routes to load a workbook, store each accepted change *before* anyone hears of it, and save versions.
+  - `collab_ops.baseVersionId` is the version a change builds on. After a restart the service loads the current version and replays the changes built on it.
+  - A "Live editing" version becomes the next base; a normal save or a restore starts a new one.
+  - Old changes are pruned nightly after 7 days (`collab.pruneOps`).
+- **Versions while live (Decision 56):** every 10 minutes, when the last person leaves, and when someone presses Ctrl/Cmd+S ("save a version now"). Labelled with contributors and no single author.
+- **Live editing and the one-editor lease never both allow editing (P3-FALLBACK-02).**
+  - The service marks the workbook as edited live (`live_until`, renewed every 30 s); meanwhile nobody can take the lease.
+  - While someone holds the lease, a live token is view-only.
+  - The editor falls back to the lease only when it can't reach the live service at all (P3-FALLBACK-01).
+- **Access changes** (shares, group members, deactivation, Trash) close the affected live connections; they reconnect with a fresh token. A restore reloads the live workbook for everyone.
+- **WebSocket protocol:**
+  - The first message carries the token, never the address.
+  - Size limit 8 MB (a paste carries its cells); 300 messages per 10 seconds; a close jumps the queue.
+  - With no proxy in front (local runs) the socket address stands in for the forwarded address, as the app does (Decision 50).
+  - The browser uses `COLLAB_PUBLIC_URL` (default: `COLLAB_URL` as `ws://`), which the page's security policy allows. The service reaches the app at `APP_INTERNAL_URL` (default `APP_URL`).
+- **Presence:**
+  - Colours come from the user id, so they're stable.
+  - One entry per person.
+  - Others' selections are drawn in the grid by our GridCraft (`SheetApp::remote_selections`).
+- **Measured (P3-PERF-01):** 20 editors, delivery p95 9 ms (hardening_results.md).
+- **Not done in Phase 3:** a Viewer's refused changes are logged by the service, not written to the audit trail (P3-ROLE-01's "audited"). The service has no database access; Phase 4 can add an internal audit route if wanted.

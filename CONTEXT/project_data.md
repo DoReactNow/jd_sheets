@@ -214,9 +214,13 @@ jd-sheets/
 | `gridcraft:failed { error }` | editor → page | Editor could not start; page shows a friendly message | 0 |
 | URL `?mode=view\|comment\|edit` | page → editor | On load (access mode; also greys out the ribbon, Decision 55) | 2 |
 | `gridcraft:mode { mode }` | page → editor | Role or lease changed while open (access mode); changes the mode does not allow are put back after each frame (Decision 54) | 2 |
-| `gridcraft:command { seq, id, params }` | editor → page | Every engine command run locally (Phase 3 GridCraft change) | 3 |
-| `gridcraft:apply { seq, id, params }` | page → editor | A command from another person (Phase 3 GridCraft change) | 3 |
-| `gridcraft:resync { bytes, seq }` | page → editor | Reload after a rejected command (Phase 3 GridCraft change) | 3 |
+| `gridcraft:live { seq }` | page → editor | Live editing starts after the server's workbook is opened (Decision 58) | 3 |
+| `gridcraft:command { clientCommandId, baseSeq, step }` | editor → page | Every change made locally, as a step (JSON text) | 3 |
+| `gridcraft:apply { message }` | page → editor | An applied or rejected change from the server (JSON text) | 3 |
+| `gridcraft:resync { name, bytes, seq }` | page → editor | The server's workbook replaces the editor's | 3 |
+| `gridcraft:resyncNeeded` | editor → page | The editor no longer agrees with the server | 3 |
+| `gridcraft:selection { sheetName, range }` | editor → page | Where this person is (presence) | 3 |
+| `gridcraft:presence { people }` | page → editor | Where the others are, drawn in the grid | 3 |
 
 The bridge validates every message (origin, shape, size) and ignores anything else.
 

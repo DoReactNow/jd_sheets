@@ -20,7 +20,7 @@ The source of truth for what is done and what is next. **Check this file first i
 | 0 | Foundation and walking skeleton | GridCraft running locally on day one; by the end, our app: file list, new workbook, edit, save, reopen | **DONE** (pull request #1 merged 2026-11-06) |
 | 1 | Identity, access and the IP wall | Sign-in, sign-up with OTP, approval queue, admin user screens, network rules, blocked page, audit trail | **DONE** (2026-11-06, built and tested locally; pull request open) |
 | 2 | Workbooks complete and sharing | Share dialog with four roles, view and comment modes, edit lease, version history and restore, autosave, import/export, trash, groups | **DONE** (2026-11-06, built and tested locally; pull request open) |
-| 3 | Live collaboration | Two people editing the same workbook at once, presence and selections, live comments | **PLANNED** (work items written 2026-11-06; waiting for approval) |
+| 3 | Live collaboration | Two people editing the same workbook at once, presence and selections, live comments | **DONE** (2026-11-06, built and tested locally; pull request open) |
 | 4 | Hardening and go-live | Load-tested, backed up, deployed on the Hostinger VPS behind the real domain | PENDING |
 
 ---
@@ -444,7 +444,7 @@ Detailed work items are written when each phase starts (Decision 36).
 - [x] Full local run once (lint, typecheck, unit, integration, Rust, contract, E2E); docs updated (`project_data.md`, `database_schema.md`, `local_setup.md`, decision log)
 - [x] Editor and Rust builds run only in W-205, W-206 and W-210 and at the final run (Decision 51)
 
-### Phase 3: Live collaboration — PLANNED (waiting for the owner's approval)
+### Phase 3: Live collaboration — DONE (pull request open)
 
 **Goal:** Several people (15–20) edit the same workbook at the same time, like Google Sheets, and always end with the same content.
 
@@ -454,54 +454,56 @@ Detailed work items are written when each phase starts (Decision 36).
 
 **Execution order:** `W-301 → W-302 → W-303 → W-304 → W-305 → W-306 → W-307 → W-308 → W-309 → W-310 → W-311`.
 
-**Scenario coverage:** every Phase 3 scenario maps to the item named below. Retired: P3-PATCH-01 (Decision 55). New: P3-NETSA-01..04 for Decision 57.
+**Scenario coverage:** every Phase 3 scenario maps to the item named below. Retired: P3-PATCH-01 (Decision 55). New: P3-NETSA-01..04 for Decision 57. Partly met: P3-ROLE-01's "audited as attempts" (logged, not in the audit trail; Decision 58). P2-E2E-03 (lease handover in the browser) is now covered by the lease integration tests, since the browser journeys run live.
+
+**Approved and built 2026-11-06** (owner: "Approve, build it"). Details settled while building: Decision 58.
 
 **How live editing works (built on Decision 22):** GridCraft's macro recorder already records every command with the sheet and selection it ran on, which is what replay needs. Our GridCraft sends each such step to the page (`gridcraft:command`). The page sends it over a WebSocket to the Rust service, which checks the role, runs it on its own copy of the workbook, numbers it, stores it in `collab_ops` and sends it to everyone (`gridcraft:apply`). Undo stays per person (Decision 56). Paste normally reads the person's own clipboard; our GridCraft puts the copied cells into the paste step instead, so everyone gets the same result. **Risk first:** W-302 proves that replay gives identical workbooks on a large set of commands before anything else is built on it. If a command can't be replayed exactly, it is sent as the cells it changed instead.
 
 #### W-301: Super Admins from any network (Decision 57)
-- [ ] RED tests: P3-NETSA-01 (a Super Admin signs in and works from outside; audited, shown on the Network page), -02 (anyone else signing in from outside gets the blocked page and no session), -03 (pages and the API from outside need a Super Admin session), -04 (sign-in limits and lockout still apply); Phase 1 network tests updated
-- [ ] Network check moves after the session for signed-in requests; `network.outsideAccess` audit; Network page lists recent outside access
+- [x] RED tests: P3-NETSA-01 (a Super Admin signs in and works from outside; audited, shown on the Network page), -02 (anyone else signing in from outside gets the blocked page and no session), -03 (pages and the API from outside need a Super Admin session), -04 (sign-in limits and lockout still apply); Phase 1 network tests updated
+- [x] Network check moves after the session for signed-in requests; `network.outsideAccess` audit; Network page lists recent outside access
 
 #### W-302: Live commands in our GridCraft (replaces "patch 0002")
-- [ ] Spike, RED tests first (Rust, native): a corpus of about 60 commands (typing, formulas, fill, sort, insert and delete rows, columns and sheets, formats, merges, comments, paste after copy and cut), each run on one session and replayed as recorded steps on another. Identical workbooks for every one, or the command is marked "send as changed cells"
-- [ ] `gridcraft:command { clientCommandId, baseSeq, step }` for every top-level step; view-only commands (scroll, selection) never sent (P3-PATCH-02, -05)
-- [ ] `gridcraft:apply` runs others' steps without echo and outside the person's own undo (P3-PATCH-03, -04, Decision 56); `gridcraft:resync { bytes, seq }` keeps scroll and selection where possible (P3-PATCH-06)
-- [ ] Paste carries its copied cells; bridge contract and unit tests for the new messages
+- [x] Spike, RED tests first (Rust, native): a corpus of about 60 commands (typing, formulas, fill, sort, insert and delete rows, columns and sheets, formats, merges, comments, paste after copy and cut), each run on one session and replayed as recorded steps on another. Identical workbooks for every one, or the command is marked "send as changed cells"
+- [x] `gridcraft:command { clientCommandId, baseSeq, step }` for every top-level step; view-only commands (scroll, selection) never sent (P3-PATCH-02, -05)
+- [x] `gridcraft:apply` runs others' steps without echo and outside the person's own undo (P3-PATCH-03, -04, Decision 56); `gridcraft:resync { bytes, seq }` keeps scroll and selection where possible (P3-PATCH-06)
+- [x] Paste carries its copied cells; bridge contract and unit tests for the new messages
 
 #### W-303: `collab_ops`, the collab token route and the snapshot route
-- [ ] Table of database_schema.md 3.15 (Prisma); RED tests for uniqueness of (`workbookId`, `seq`) and (`workbookId`, `userId`, `clientCommandId`)
-- [ ] `POST /api/workbooks/:id/collab-token` (read): token with role and display name (Decision 10)
-- [ ] `POST /api/internal/collab/snapshots` (internal): stores a snapshot as a version (`LIVE_SNAPSHOT`, contributors), never on top of a newer version (P3-SNAP-01..03 app side)
+- [x] Table of database_schema.md 3.15 (Prisma); RED tests for uniqueness of (`workbookId`, `seq`) and (`workbookId`, `userId`, `clientCommandId`)
+- [x] `POST /api/workbooks/:id/collab-token` (read): token with role and display name (Decision 10)
+- [x] `POST /api/internal/collab/snapshots` (internal): stores a snapshot as a version (`LIVE_SNAPSHOT`, contributors), never on top of a newer version (P3-SNAP-01..03 app side)
 
 #### W-304: The WebSocket in the Rust service
-- [ ] RED tests (real WebSocket clients): P3-WS-01, -02, -03, -06, -07, -08
-- [ ] `/collab/:workbookId` upgrade, token check at connect and on refresh, message size and rate limits, reconnect from a sequence number
+- [x] RED tests (real WebSocket clients): P3-WS-01, -02, -03, -06, -07, -08
+- [x] `/collab/:workbookId` upgrade, token check at connect and on refresh, message size and rate limits, reconnect from a sequence number
 
 #### W-305: One live session per workbook: ordering, roles and rebasing
-- [ ] RED tests: P3-ORDER-01..03, P3-ROLE-01..05, P3-REBASE-01..06, P3-PERF-02, -03 (25 editors, Decision 56)
-- [ ] Session manager (load the current version, run steps, number them, store them in `collab_ops`, send them to everyone); rebasing rules of Decision 56 (the later change wins; rows, columns and sheets shift pending edits; deleted sheet → refuse and resync)
-- [ ] Access changes pushed from the app close or downgrade connections within seconds (P3-WS-04, -05)
+- [x] RED tests: P3-ORDER-01..03, P3-ROLE-01..05, P3-REBASE-01..06, P3-PERF-02, -03 (25 editors, Decision 56)
+- [x] Session manager (load the current version, run steps, number them, store them in `collab_ops`, send them to everyone); rebasing rules of Decision 56 (the later change wins; rows, columns and sheets shift pending edits; deleted sheet → refuse and resync)
+- [x] Access changes pushed from the app close or downgrade connections within seconds (P3-WS-04, -05)
 
 #### W-306: Convergence property tests
-- [ ] P3-CONV-01 (2–8 simulated clients, random commands, delays and reconnects → identical values everywhere), -02 (replaying `collab_ops` gives the live workbook), -03 (golden workbooks keep their checked cells)
+- [x] P3-CONV-01 (2–8 simulated clients, random commands, delays and reconnects → identical values everywhere), -02 (replaying `collab_ops` gives the live workbook), -03 (golden workbooks keep their checked cells)
 
 #### W-307: Presence
-- [ ] RED tests: P3-PRES-01..05 (names and colours from the token; one entry per person; gone within 30 seconds)
+- [x] RED tests: P3-PRES-01..05 (names and colours from the token; one entry per person; gone within 30 seconds)
 
 #### W-308: Snapshots, recovery, restore and fallback
-- [ ] RED tests: P3-SNAP-01..03 (every 10 minutes of editing and when the last person leaves, "Live editing" with contributors, retries without loss), P3-RECOV-01..03, P3-RESTORE-01, P3-FALLBACK-02
-- [ ] Restart recovery from the last version plus later commands; pruning of old `collab_ops`
+- [x] RED tests: P3-SNAP-01..03 (every 10 minutes of editing and when the last person leaves, "Live editing" with contributors, retries without loss), P3-RECOV-01..03, P3-RESTORE-01, P3-FALLBACK-02
+- [x] Restart recovery from the last version plus later commands; pruning of old `collab_ops`
 
 #### W-309: The editor page goes live
-- [ ] RED tests (unit-dom and bridge): live connection, reconnect, presence list and colours, mode drop on role change, P3-FALLBACK-01 (service unreachable → the Phase 2 edit lease with a friendly notice)
-- [ ] Presence avatars in the top bar; others' selections shown in the grid (our GridCraft draws them from presence)
+- [x] RED tests (unit-dom and bridge): live connection, reconnect, presence list and colours, mode drop on role change, P3-FALLBACK-01 (service unreachable → the Phase 2 edit lease with a friendly notice)
+- [x] Presence avatars in the top bar; others' selections shown in the grid (our GridCraft draws them from presence)
 
 #### W-310: Performance check
-- [ ] P3-PERF-01: 20 simulated editors on the office-network profile, 95th percentile under 300 ms (Rust test with timings recorded in `hardening_results.md`)
+- [x] P3-PERF-01: 20 simulated editors on the office-network profile, 95th percentile under 300 ms (Rust test with timings recorded in `hardening_results.md`)
 
 #### W-311: Journey, full run and docs
-- [ ] E2E: P3-E2E-01 (journey 7: two browsers edit live and end with the same values; a third as Viewer sees it live)
-- [ ] Full local run once (lint, typecheck, unit, integration, contract, Rust, editor tests, E2E); docs updated (project_data 4.6 bridge table, database_schema, local_setup, decision log)
+- [x] E2E: P3-E2E-01 (journey 7: two browsers edit live and end with the same values; a third as Viewer sees it live)
+- [x] Full local run once (lint, typecheck, unit, integration, contract, Rust, editor tests, E2E); docs updated (project_data 4.6 bridge table, database_schema, local_setup, decision log)
 
 ### Phase 4: Hardening and go-live — PENDING
 

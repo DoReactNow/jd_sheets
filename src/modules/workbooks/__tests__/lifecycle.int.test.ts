@@ -17,7 +17,7 @@ import { GET as listRoute } from "@/app/api/workbooks/route";
 import { APP_CONFIG } from "@/shared/config/appConfig";
 import { getPrisma } from "@/shared/db/prisma";
 import { getFileStorage } from "@/shared/storage";
-import { createTestClock, plusDuration } from "@/shared/time";
+import { createTestClock, parseInstant, plusDuration } from "@/shared/time";
 import { getWorkbookValidator, minimalXlsx } from "@/shared/validator";
 import { logger } from "@/shared/logger";
 import { call, callRaw, installRealResolvers, signIn } from "@/tests/setup/session";
@@ -232,7 +232,7 @@ describe("nightly jobs (P2-TRASH-03, P2-VER-06, -07)", () => {
 
   it("prunes: all for 30 days, then one per day to a year, then one per month; never named or current", async () => {
     // Versions made on several days, dated in the past.
-    const now = new Date("2027-12-01T06:00:00Z");
+    const now = parseInstant("2027-12-01T06:00:00Z");
     const ages = [400, 400, 380, 200, 200, 200, 40, 40, 10, 10];
     for (let i = 0; i < ages.length; i++) await saveAs(oc, wb.id, { A1: String(i) });
     const versions = await getPrisma().workbookVersion.findMany({

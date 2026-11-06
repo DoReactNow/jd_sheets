@@ -36,7 +36,7 @@ export interface SessionDeps {
   lease(takeOver: boolean): Promise<LeaseAnswer>;
   /** POST /api/workbooks/:id/lease/release (keepalive) */
   release(): void;
-  /** Asks the editor to save (gridcraft:saveNow). */
+  /** Asks the editor to save (the bridge's save-now message). */
   saveNow(): void;
   onChange(view: SessionView): void;
   timers: Timers;

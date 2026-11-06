@@ -25,6 +25,10 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             </Link>
           ) : null}
           {can(principal, "users:view") ? <Link href="/admin/users">Users</Link> : null}
+          {can(principal, "groups:manage") ? <Link href="/admin/groups">Groups</Link> : null}
+          {can(principal, "workbooks:administer") ? (
+            <Link href="/admin/workbooks">Workbooks</Link>
+          ) : null}
           {can(principal, "network:view") ? (
             <Link href="/admin/network">Network access</Link>
           ) : null}

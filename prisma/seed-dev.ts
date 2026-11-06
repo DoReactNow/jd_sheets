@@ -72,6 +72,45 @@ async function main(): Promise<void> {
     await workbooksService().createFromBytes(principal, sample.title, bytes);
     console.log(`[seed-dev] created "${sample.title}" for ${asha.email}`);
   }
+
+  // Phase 2: a group, shares and a company link, so sharing can be tried at once.
+  const rahul = await prisma.user.findUniqueOrThrow({ where: { email: "rahul.dev@jdfusion.in" } });
+  const owner = await prisma.user.findUniqueOrThrow({ where: { email: "owner.dev@jdfusion.in" } });
+  const group = await prisma.group.upsert({
+    where: {
+      id:
+        (await prisma.group.findFirst({ where: { name: "Finance (dev)" } }))?.id ??
+        "00000000-0000-7000-8000-000000000000",
+    },
+    update: {},
+    create: { name: "Finance (dev)", createdById: owner.id },
+  });
+  await prisma.groupMember.createMany({
+    data: [asha.id, rahul.id].map((userId) => ({ groupId: group.id, userId, addedById: owner.id })),
+    skipDuplicates: true,
+  });
+  const books = await prisma.workbook.findMany({
+    where: { ownerId: asha.id },
+    orderBy: { createdAt: "asc" },
+  });
+  const [first, second, third] = books;
+  if (first) {
+    await prisma.shareGrant.upsert({
+      where: { workbookId_userId: { workbookId: first.id, userId: rahul.id } },
+      update: {},
+      create: { workbookId: first.id, userId: rahul.id, role: "COMMENTER", createdById: asha.id },
+    });
+  }
+  if (second) {
+    await prisma.shareGrant.upsert({
+      where: { workbookId_groupId: { workbookId: second.id, groupId: group.id } },
+      update: {},
+      create: { workbookId: second.id, groupId: group.id, role: "VIEWER", createdById: asha.id },
+    });
+  }
+  if (third)
+    await prisma.workbook.update({ where: { id: third.id }, data: { linkRole: "VIEWER" } });
+  console.log("[seed-dev] sharing samples: a Commenter share, a group share and a company link");
   await prisma.$disconnect();
 }
 

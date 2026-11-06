@@ -25,8 +25,9 @@ export function safeDetails(details: Record<string, unknown> = {}): Record<strin
   return Object.fromEntries(Object.entries(details).filter(([key]) => !FORBIDDEN_KEYS.test(key)));
 }
 
-export async function recordAudit(tx: AuditTx, input: AuditInput): Promise<void> {
-  await tx.auditEvent.create({
+/** Writes the event; answers its id. */
+export async function recordAudit(tx: AuditTx, input: AuditInput): Promise<string> {
+  const created = await tx.auditEvent.create({
     data: {
       action: input.action,
       targetType: input.targetType,
@@ -36,6 +37,16 @@ export async function recordAudit(tx: AuditTx, input: AuditInput): Promise<void>
       ip: input.ip ?? null,
       details: safeDetails(input.details) as Prisma.InputJsonValue,
     },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+/** One event by id (the administrator's audited open, P2-ADMINWB-03). */
+export function findAuditEvent(id: string) {
+  return getPrisma().auditEvent.findUnique({
+    where: { id },
+    select: { id: true, action: true, actorId: true, targetId: true, createdAt: true },
   });
 }
 

@@ -104,6 +104,13 @@ export const workbooksRepository = {
     });
   },
 
+  findSettings(id: string) {
+    return getPrisma().workbook.findUnique({
+      where: { id },
+      select: { allowDownloadForReaders: true, linkRole: true },
+    });
+  },
+
   findById(id: string): Promise<WorkbookRow | null> {
     return getPrisma().workbook.findUnique({ where: { id }, select: workbookSelect });
   },
@@ -195,8 +202,10 @@ export const workbooksRepository = {
   async addVersion(
     workbookId: string,
     baseVersionId: string,
-    version: NewVersion,
+    version: NewVersion & { restoredFromId?: string },
     now: Date,
+    /** More writes in the same transaction (the audit event of a restore). */
+    alsoInTx?: (tx: Tx, number: number) => Promise<unknown>,
   ): Promise<{ number: number }> {
     return getPrisma().$transaction(async (tx) => {
       const locked = await tx.$queryRaw<Array<{ current_version_id: string | null }>>(
@@ -215,7 +224,158 @@ export const workbooksRepository = {
         where: { id: workbookId },
         data: { currentVersionId: version.id, sizeBytes: version.sizeBytes, updatedAt: now },
       });
+      if (alsoInTx) await alsoInTx(tx, number);
       return { number };
+    });
+  },
+
+  transaction<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+    return getPrisma().$transaction(fn);
+  },
+
+  // --- versions (W-209) ----------------------------------------------------------------------
+
+  /** Versions newest first, with who made them; keyset by number (X-LIST-05). */
+  listVersions(workbookId: string, beforeNumber: number | undefined, limit: number) {
+    return getPrisma().workbookVersion.findMany({
+      where: { workbookId, number: beforeNumber ? { lt: beforeNumber } : undefined },
+      orderBy: { number: "desc" },
+      take: limit,
+      select: {
+        id: true,
+        number: true,
+        name: true,
+        source: true,
+        sizeBytes: true,
+        createdAt: true,
+        restoredFromId: true,
+        createdById: true,
+        storageKey: true,
+      },
+    });
+  },
+
+  findVersion(workbookId: string, versionId: string) {
+    return getPrisma().workbookVersion.findFirst({
+      where: { id: versionId, workbookId },
+      select: {
+        id: true,
+        number: true,
+        name: true,
+        storageKey: true,
+        sizeBytes: true,
+        createdAt: true,
+      },
+    });
+  },
+
+  async userNames(ids: string[]): Promise<Map<string, string>> {
+    if (ids.length === 0) return new Map();
+    const users = await getPrisma().user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, displayName: true },
+    });
+    return new Map(users.map((u) => [u.id, u.displayName]));
+  },
+
+  async nameVersion(versionId: string, name: string | null): Promise<void> {
+    await getPrisma().workbookVersion.update({ where: { id: versionId }, data: { name } });
+  },
+
+  async rename(tx: Tx, id: string, title: string): Promise<void> {
+    await tx.workbook.update({ where: { id }, data: { title } });
+  },
+
+  // --- trash and deletion (W-211, W-213) -----------------------------------------------------
+
+  async setTrashed(tx: Tx, id: string, trashed: { at: Date; by: string } | null): Promise<void> {
+    await tx.workbook.update({
+      where: { id },
+      data: trashed
+        ? { trashedAt: trashed.at, trashedById: trashed.by }
+        : { trashedAt: null, trashedById: null },
+    });
+  },
+
+  async storageKeysOf(id: string, tx?: Tx): Promise<string[]> {
+    const rows = await (tx ?? getPrisma()).workbookVersion.findMany({
+      where: { workbookId: id },
+      select: { storageKey: true },
+    });
+    return rows.map((r) => r.storageKey);
+  },
+
+  /** Deletes the workbook row; versions, shares, the lease and recent opens go with it. */
+  async deleteWorkbook(tx: Tx, id: string): Promise<boolean> {
+    await tx.workbook.updateMany({ where: { id }, data: { currentVersionId: null } });
+    return (await tx.workbook.deleteMany({ where: { id } })).count === 1;
+  },
+
+  trashedBefore(cutoff: Date, limit: number) {
+    return getPrisma().workbook.findMany({
+      where: { trashedAt: { lt: cutoff } },
+      select: { id: true, ownerId: true },
+      orderBy: { trashedAt: "asc" },
+      take: limit,
+    });
+  },
+
+  /** Workbooks with versions older than `cutoff` (pruning candidates), a page at a time. */
+  async workbooksWithVersionsBefore(cutoff: Date, afterId: string | null, limit: number) {
+    const rows = await getPrisma().$queryRaw<Array<{ workbook_id: string }>>(Prisma.sql`
+      SELECT DISTINCT workbook_id FROM workbooks_versions
+      WHERE created_at < ${cutoff} ${afterId ? Prisma.sql`AND workbook_id > ${afterId}::uuid` : Prisma.empty}
+      ORDER BY workbook_id LIMIT ${limit}`);
+    return rows.map((r) => r.workbook_id);
+  },
+
+  versionsForPruning(workbookId: string) {
+    return getPrisma().workbook.findUnique({
+      where: { id: workbookId },
+      select: {
+        currentVersionId: true,
+        versions: {
+          select: { id: true, name: true, createdAt: true, storageKey: true },
+          orderBy: { createdAt: "desc" },
+        },
+      },
+    });
+  },
+
+  /** Deletes version rows, never the current one. Answers how many went. */
+  async deleteVersions(workbookId: string, ids: string[]): Promise<number> {
+    if (ids.length === 0) return 0;
+    return getPrisma().$transaction(async (tx) => {
+      const current = await tx.workbook.findUnique({
+        where: { id: workbookId },
+        select: { currentVersionId: true },
+      });
+      const safe = ids.filter((id) => id !== current?.currentVersionId);
+      return (
+        await tx.workbookVersion.deleteMany({ where: { id: { in: safe }, workbookId, name: null } })
+      ).count;
+    });
+  },
+
+  // --- administrator list (W-212) ------------------------------------------------------------
+
+  adminList(filter: { q?: string; ownerStatus?: "ACTIVE" | "DEACTIVATED"; limit: number }) {
+    return getPrisma().workbook.findMany({
+      where: {
+        currentVersionId: { not: null },
+        title: filter.q ? { contains: filter.q, mode: "insensitive" } : undefined,
+        owner: filter.ownerStatus ? { status: filter.ownerStatus } : undefined,
+      },
+      orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+      take: filter.limit,
+      select: {
+        id: true,
+        title: true,
+        sizeBytes: true,
+        updatedAt: true,
+        trashedAt: true,
+        owner: { select: { id: true, displayName: true, email: true, status: true } },
+      },
     });
   },
 

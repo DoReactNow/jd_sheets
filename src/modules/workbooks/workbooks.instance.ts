@@ -3,7 +3,9 @@ import { logger } from "@/shared/logger";
 import { getFileStorage } from "@/shared/storage";
 import { systemClock } from "@/shared/time";
 import { getWorkbookValidator } from "@/shared/validator";
+import { createHistoryService, type HistoryService } from "./workbooks.history";
 import { createLeaseService, type LeaseService } from "./workbooks.lease";
+import { createLifecycleService, type LifecycleService } from "./workbooks.lifecycle";
 import { workbooksRepository } from "./workbooks.repository";
 import { createWorkbooksService, type WorkbooksService } from "./workbooks.service";
 
@@ -26,4 +28,28 @@ export function workbooksService(): WorkbooksService {
     logger,
   });
   return instance;
+}
+
+let historyInstance: HistoryService | undefined;
+let lifecycleInstance: LifecycleService | undefined;
+
+export function historyService(): HistoryService {
+  historyInstance ??= createHistoryService({
+    repository: workbooksRepository,
+    lease: leaseService(),
+    storage: getFileStorage(),
+    clock: systemClock,
+  });
+  return historyInstance;
+}
+
+export function lifecycleService(): LifecycleService {
+  lifecycleInstance ??= createLifecycleService({
+    repository: workbooksRepository,
+    storage: getFileStorage(),
+    validator: getWorkbookValidator(),
+    clock: systemClock,
+    logger,
+  });
+  return lifecycleInstance;
 }

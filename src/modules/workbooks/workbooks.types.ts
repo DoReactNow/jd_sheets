@@ -30,3 +30,32 @@ export interface SavedVersionDto {
   sizeBytes: number;
   savedAt: string;
 }
+
+/** One entry of the version history (P2-VER-01). */
+export interface VersionDto {
+  id: string;
+  number: number;
+  name: string | null;
+  source: "CREATE" | "SAVE" | "AUTOSAVE" | "IMPORT" | "RESTORE" | "LIVE_SNAPSHOT";
+  createdBy: { id: string; displayName: string } | null;
+  createdAt: string;
+  sizeBytes: number;
+  /** For a restore: the number of the version it brought back, when that still exists. */
+  restoredFromNumber: number | null;
+  current: boolean;
+}
+
+export interface VersionPageDto {
+  items: VersionDto[];
+  nextCursor: string | null;
+}
+
+/** What an administrator sees of any workbook: never its content (P2-ADMINWB-01). */
+export interface AdminWorkbookDto {
+  id: string;
+  title: string;
+  sizeBytes: number;
+  updatedAt: string;
+  trashedAt: string | null;
+  owner: { id: string; displayName: string; email: string; active: boolean } | null;
+}

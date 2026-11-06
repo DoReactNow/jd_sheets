@@ -16,9 +16,23 @@ import {
   type CreateWorkbookInput,
   type ListWorkbooksInput,
 } from "./workbooks.schemas";
-import { leaseService, workbooksService } from "./workbooks.instance";
+import { getEnv } from "@/shared/config/env";
+import { clientIp } from "@/shared/http/clientIp";
+import * as allSchemas from "./workbooks.schemas";
+import {
+  historyService,
+  leaseService,
+  lifecycleService,
+  workbooksService,
+} from "./workbooks.instance";
 import type { LeaseState } from "./workbooks.lease";
-import type { SavedVersionDto, WorkbookDto, WorkbookPageDto } from "./workbooks.types";
+import type {
+  AdminWorkbookDto,
+  SavedVersionDto,
+  VersionPageDto,
+  WorkbookDto,
+  WorkbookPageDto,
+} from "./workbooks.types";
 
 /** Input schemas the routes declare (routes import only the controller, rule 2). */
 export const workbookSchemas = {
@@ -26,7 +40,41 @@ export const workbookSchemas = {
   list: listWorkbooksInput,
   lease: leaseInput,
   releaseLease: releaseLeaseInput,
+  rename: allSchemas.renameInput,
+  versionName: allSchemas.versionNameInput,
+  versionList: allSchemas.versionListInput,
+  adminList: allSchemas.adminListInput,
+  adminOpen: allSchemas.adminOpenInput,
+  adminContent: allSchemas.adminContentInput,
 };
+
+/** The header an import sends its original file name in, URL-encoded. */
+export const IMPORT_FILE_NAME_HEADER = "x-file-name";
+
+function meta(request: Request) {
+  const ip = clientIp(request.headers, getEnv().TRUSTED_PROXY_HOPS);
+  return { ip: ip === "unknown" ? null : ip };
+}
+
+function fileResponse(
+  body: Readable,
+  sizeBytes: number,
+  name: string,
+  etag?: string,
+): { response: Response } {
+  const headers: Record<string, string> = {
+    "content-type": APP_CONFIG.workbooks.mediaType,
+    "content-length": String(sizeBytes),
+    "content-disposition": attachmentDisposition(name),
+    "cache-control": "no-store",
+  };
+  if (etag) headers.etag = `"${etag}"`;
+  return {
+    response: new Response(Readable.toWeb(body) as ReadableStream, { status: 200, headers }),
+  };
+}
+
+const xlsxName = (title: string) => `${title}.${APP_CONFIG.workbooks.extension}`;
 
 /** The header an editor page sends with each save: its lease id (Decision 52). */
 export const EDITOR_TAB_HEADER = "x-editor-tab";
@@ -56,9 +104,155 @@ export const workbooksController = {
     };
   },
 
-  /** GET /api/workbooks/:id */
-  async get(context: Ctx): Promise<HandlerResult<WorkbookDto>> {
-    return { data: await workbooksService().get(context.params.id, context.workbookRole!) };
+  /** GET /api/workbooks/:id (with the download setting, for the editor page) */
+  async get(
+    context: Ctx,
+  ): Promise<HandlerResult<WorkbookDto & { allowDownloadForReaders: boolean }>> {
+    const [workbook, settings] = await Promise.all([
+      workbooksService().get(context.params.id, context.workbookRole!),
+      lifecycleService().downloadSettings(context.params.id),
+    ]);
+    return { data: { ...workbook, allowDownloadForReaders: settings.allowDownloadForReaders } };
+  },
+
+  /** PATCH /api/workbooks/:id: rename (edit) */
+  async rename(context: Ctx<{ title: string }>): Promise<HandlerResult<{ ok: true }>> {
+    await historyService().rename(
+      principalOf(context),
+      context.params.id,
+      context.input.title,
+      meta(context.request),
+    );
+    return { data: { ok: true } };
+  },
+
+  /** GET /api/workbooks/:id/download (read; readers only when allowed) */
+  async download(context: Ctx): Promise<RawResult> {
+    await lifecycleService().assertMayDownload(context.params.id, context.workbookRole!);
+    const file = await workbooksService().openContent(context.params.id);
+    return fileResponse(file.body, file.sizeBytes, xlsxName(file.title), file.versionId);
+  },
+
+  /** POST /api/workbooks/import (workbooks:create): body = the file, name in x-file-name */
+  async importFile(
+    context: RouteContext<undefined, Record<string, string>>,
+  ): Promise<HandlerResult<WorkbookDto>> {
+    const fileName = parseInput(
+      allSchemas.importFileNameSchema,
+      context.request.headers.get(IMPORT_FILE_NAME_HEADER) ?? undefined,
+    );
+    const bytes = await readBodyLimited(
+      context.request,
+      APP_CONFIG.workbooks.maxBytes,
+      "WORKBOOK_TOO_LARGE",
+    );
+    const converted = await lifecycleService().convertImport(fileName, bytes);
+    const title = allSchemas.titleSchema.safeParse(converted.title);
+    return {
+      status: 201,
+      data: await workbooksService().createFromBytes(
+        principalOf(context),
+        title.success ? title.data : APP_CONFIG.workbooks.defaultTitle,
+        converted.bytes,
+      ),
+    };
+  },
+
+  /** GET /api/workbooks/:id/versions (history) */
+  async versions(context: Ctx<{ cursor?: string }>): Promise<HandlerResult<VersionPageDto>> {
+    return { data: await historyService().list(context.params.id, context.input.cursor) };
+  },
+
+  /** PATCH /api/workbooks/:id/versions/:versionId: name it (edit) */
+  async nameVersion(
+    context: RouteContext<{ name: string | null }, { id: string; versionId: string }>,
+  ): Promise<HandlerResult<{ ok: true }>> {
+    await historyService().name(context.params.id, context.params.versionId, context.input.name);
+    return { data: { ok: true } };
+  },
+
+  /** GET /api/workbooks/:id/versions/:versionId/content (history) */
+  async versionContent(
+    context: RouteContext<undefined, { id: string; versionId: string }>,
+  ): Promise<RawResult> {
+    const file = await historyService().openVersion(context.params.id, context.params.versionId);
+    return fileResponse(
+      file.body,
+      file.sizeBytes,
+      xlsxName(`${file.title} (version ${file.number})`),
+    );
+  },
+
+  /** POST /api/workbooks/:id/versions/:versionId/restore (edit) */
+  async restoreVersion(
+    context: RouteContext<undefined, { id: string; versionId: string }>,
+  ): Promise<HandlerResult<SavedVersionDto>> {
+    return {
+      data: await historyService().restore(
+        principalOf(context),
+        context.params.id,
+        context.params.versionId,
+        meta(context.request),
+      ),
+    };
+  },
+
+  /** POST /api/workbooks/:id/trash (own) */
+  async trash(context: Ctx): Promise<HandlerResult<{ ok: true }>> {
+    await lifecycleService().trash(principalOf(context), context.params.id, meta(context.request));
+    return { data: { ok: true } };
+  },
+
+  /** POST /api/workbooks/:id/untrash (own) */
+  async untrash(context: Ctx): Promise<HandlerResult<{ ok: true }>> {
+    await lifecycleService().untrash(
+      principalOf(context),
+      context.params.id,
+      meta(context.request),
+    );
+    return { data: { ok: true } };
+  },
+
+  /** DELETE /api/workbooks/:id (own; only from the Trash) */
+  async deleteForever(context: Ctx): Promise<HandlerResult<{ ok: true }>> {
+    await lifecycleService().deleteForever(
+      principalOf(context),
+      context.params.id,
+      meta(context.request),
+    );
+    return { data: { ok: true } };
+  },
+
+  /** GET /api/admin/workbooks (workbooks:administer) */
+  async adminList(
+    context: RouteContext<
+      { q?: string; ownerStatus?: "ACTIVE" | "DEACTIVATED" },
+      Record<string, string>
+    >,
+  ): Promise<HandlerResult<{ workbooks: AdminWorkbookDto[] }>> {
+    return { data: { workbooks: await lifecycleService().adminList(context.input) } };
+  },
+
+  /** POST /api/admin/workbooks/:id/open (workbooks:administer): audited every time */
+  async adminOpen(context: Ctx<{ reason: string }>) {
+    return {
+      data: await lifecycleService().adminOpen(
+        principalOf(context),
+        context.params.id,
+        context.input.reason,
+        meta(context.request),
+      ),
+    };
+  },
+
+  /** GET /api/admin/workbooks/:id/content?grant= (workbooks:administer) */
+  async adminContent(context: Ctx<{ grant: string }>): Promise<RawResult> {
+    const file = await lifecycleService().adminContent(
+      principalOf(context),
+      context.params.id,
+      context.input.grant,
+    );
+    return fileResponse(file.body, file.sizeBytes, xlsxName(file.title), file.versionId);
   },
 
   /** GET /api/workbooks/:id/content: the current version's bytes, with its version as ETag. */

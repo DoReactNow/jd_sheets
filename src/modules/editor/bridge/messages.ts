@@ -1,6 +1,6 @@
 // GridCraft's host messages (Decision 7, project_data.md 4.6). This folder is the only code that
 // knows their names (P0-ARCH-04). Shapes from vendor/gridcraft/apps/gridcraft-web/src/host.rs at
-// the pinned tag; contracts/bridge/messages.json holds examples both sides agree on.
+// our own copy (Decision 55); contracts/bridge/messages.json holds examples both sides agree on.
 import { APP_CONFIG } from "@/shared/config/appConfig";
 
 const P = APP_CONFIG.editor.messagePrefix;
@@ -11,7 +11,21 @@ export const MESSAGE = {
   save: `${P}save`,
   dirty: `${P}dirty`,
   failed: `${P}failed`,
+  // Access mode (Decisions 43, 55): the access mode and "save now" for autosave.
+  mode: `${P}mode`,
+  saveNow: `${P}saveNow`,
 } as const;
+
+/** What the person may do in the editor (access mode): from their role and the edit lease. */
+export type EditorMode = "edit" | "comment" | "view";
+
+export function modeMessage(mode: EditorMode): { type: string; mode: EditorMode } {
+  return { type: MESSAGE.mode, mode };
+}
+
+export function saveNowMessage(): { type: string } {
+  return { type: MESSAGE.saveNow };
+}
 
 export type IncomingMessage =
   | { type: "ready"; version: string | null }

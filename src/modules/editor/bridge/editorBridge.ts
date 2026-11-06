@@ -5,7 +5,14 @@
 //   failed→ a friendly message                           (P0-BRIDGE-06)
 // Only messages from the editor's own window, on our own origin, are heard (P0-BRIDGE-02).
 // Everything outside (network, DOM, navigation) is injected, so it is tested without a browser.
-import { isWorkbookFile, openMessage, parseIncoming } from "./messages";
+import {
+  isWorkbookFile,
+  modeMessage,
+  openMessage,
+  parseIncoming,
+  saveNowMessage,
+  type EditorMode,
+} from "./messages";
 
 export type BridgeStatus =
   | "loading" // waiting for the editor or the workbook
@@ -32,7 +39,14 @@ export interface LoadedWorkbook {
 }
 
 export type SaveOutcome =
-  { ok: true; versionId: string } | { ok: false; conflict: boolean; message: string };
+  | { ok: true; versionId: string }
+  | {
+      ok: false;
+      conflict: boolean;
+      message: string;
+      /** The catalog code, so the page can react (WORKBOOK_LOCKED: check the lease again). */
+      code?: string;
+    };
 
 export interface BridgeDeps {
   /** The window the editor's messages arrive at (the page's own window). */
@@ -42,7 +56,13 @@ export interface BridgeDeps {
   /** Our own origin; the only one heard and posted to. */
   origin: string;
   load: () => Promise<{ ok: true; workbook: LoadedWorkbook } | { ok: false; message: string }>;
-  save: (bytes: Uint8Array, baseVersionId: string) => Promise<SaveOutcome>;
+  save: (
+    bytes: Uint8Array,
+    baseVersionId: string,
+    options: { autosave: boolean },
+  ) => Promise<SaveOutcome>;
+  /** Called after every save attempt (autosave retries, lease checks). */
+  onSaved?: (outcome: SaveOutcome) => void;
   /** Files the editor hands over that are not the workbook (PDF exports) are downloaded. */
   download: (name: string, bytes: Uint8Array) => void;
   onChange: (state: BridgeState) => void;
@@ -56,6 +76,10 @@ export interface EditorBridge {
   hasUnsavedWork(): boolean;
   /** Bytes of the last save the server refused as a conflict, for "Save as a copy". */
   conflictedBytes(): Uint8Array | null;
+  /** Switches the editor's access mode at once (P2-MODE-05). */
+  setMode(mode: EditorMode): void;
+  /** Asks the editor to save, for autosave; the save it hands over is marked as one. */
+  saveNow(): void;
 }
 
 export function createEditorBridge(deps: BridgeDeps): EditorBridge {
@@ -65,6 +89,7 @@ export function createEditorBridge(deps: BridgeDeps): EditorBridge {
   let pending: Uint8Array | null = null;
   let conflicted: Uint8Array | null = null;
   let loaded = false;
+  let autosaveRequested = false;
 
   const set = (next: Partial<BridgeState>) => {
     state = { ...state, ...next };
@@ -99,7 +124,10 @@ export function createEditorBridge(deps: BridgeDeps): EditorBridge {
       const base = state.baseVersionId;
       if (!base) break;
       set({ status: "saving", message: null });
-      const outcome = await deps.save(current, base);
+      const autosave = autosaveRequested;
+      autosaveRequested = false;
+      const outcome = await deps.save(current, base, { autosave });
+      deps.onSaved?.(outcome);
       if (outcome.ok) {
         set({ baseVersionId: outcome.versionId, status: settledStatus() });
       } else if (outcome.conflict) {
@@ -159,5 +187,11 @@ export function createEditorBridge(deps: BridgeDeps): EditorBridge {
     hasUnsavedWork: () =>
       dirty || saving || pending !== null || ["conflict", "save-failed"].includes(state.status),
     conflictedBytes: () => conflicted,
+    setMode: (mode) => deps.editor()?.postMessage(modeMessage(mode), deps.origin),
+    saveNow: () => {
+      if (!loaded || state.status === "conflict") return;
+      autosaveRequested = true;
+      deps.editor()?.postMessage(saveNowMessage(), deps.origin);
+    },
   };
 }

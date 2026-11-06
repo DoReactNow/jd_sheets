@@ -5,3 +5,9 @@ export { identityJobs, identitySchedules, sendOtpJob, cleanupExpiredJob } from "
 export { isAllowedEmail, normalizeEmail } from "./identity.email";
 export { hashPassword, passwordProblem } from "./identity.passwords";
 export { adminService as identityAdmin } from "./identity.admin";
+export {
+  groupsService,
+  type GroupDto,
+  type GroupMemberDto,
+  type GroupsService,
+} from "./identity.groups";

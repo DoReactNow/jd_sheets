@@ -16,6 +16,7 @@ import { minimalXlsx } from "@/shared/validator";
 import { callRoute } from "@/tests/setup/callRoute";
 import { actAs, createTestUser, resetWithRoles, stopActing } from "@/tests/setup/users";
 import { resetTestStorage } from "@/tests/setup/testStorage";
+import { holdLease, TEST_TAB } from "@/tests/setup/workbooks";
 
 import type { Principal } from "@/shared/rbac/principal";
 
@@ -41,8 +42,14 @@ async function create(title?: string): Promise<Wb> {
   return result.body!.data;
 }
 
+// Saves need the edit lease (Phase 2, P2-LEASE-07); Phase 0 tests save as its holder.
 async function save(id: string, bytes: Uint8Array, ifMatch?: string) {
-  const headers: Record<string, string> = { "content-type": APP_CONFIG.workbooks.mediaType };
+  const owner = await getPrisma().workbook.findUnique({ where: { id }, select: { ownerId: true } });
+  if (owner?.ownerId) await holdLease(owner.ownerId, id);
+  const headers: Record<string, string> = {
+    "content-type": APP_CONFIG.workbooks.mediaType,
+    "x-editor-tab": TEST_TAB,
+  };
   if (ifMatch !== undefined) headers["if-match"] = ifMatch;
   const response = await saveRoute(
     new Request(`http://127.0.0.1/api/workbooks/${id}/content`, {
@@ -144,9 +151,11 @@ describe("listing (P0-WB-02, X-ACCESS-06)", () => {
     await create("Ravi's");
     actAs(asha);
     await save(first.id, minimalXlsx({ A1: "1" }), `"${first.currentVersionId}"`);
-    const result = await callRoute<{ data: Wb[] }>(listRoute, { path: "/api/workbooks" });
-    expect(result.body!.data.map((w) => w.title)).toEqual(["First", "Second"]);
-    expect(result.body!.data.map((w) => w.id)).toEqual([first.id, second.id]);
+    const result = await callRoute<{ data: { items: Wb[] } }>(listRoute, {
+      path: "/api/workbooks",
+    });
+    expect(result.body!.data.items.map((w) => w.title)).toEqual(["First", "Second"]);
+    expect(result.body!.data.items.map((w) => w.id)).toEqual([first.id, second.id]);
   });
 });
 
@@ -205,10 +214,11 @@ describe("saving (P0-WB-04..08, P0-WB-11, P0-WB-12)", () => {
 
   it("accepts a bare version ID in If-Match and marks autosaves", async () => {
     const wb = await create("Bare");
+    await holdLease(asha.userId, wb.id);
     const response = await saveRoute(
       new Request(`http://127.0.0.1/api/workbooks/${wb.id}/content?autosave=1`, {
         method: "PUT",
-        headers: { "if-match": wb.currentVersionId },
+        headers: { "if-match": wb.currentVersionId, "x-editor-tab": TEST_TAB },
         body: new Uint8Array(minimalXlsx()),
       }),
       { params: Promise.resolve({ id: wb.id }) },

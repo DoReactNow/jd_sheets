@@ -87,8 +87,59 @@ export function zipEntryNames(bytes: Uint8Array): string[] | null {
   return names;
 }
 
+/**
+ * The contents of a ZIP's stored (uncompressed) entries, by name; null when it is not a readable
+ * ZIP or an entry is compressed. Enough for the fake validator, which only reads our own files.
+ */
+export function storedEntries(bytes: Uint8Array): Map<string, string> | null {
+  const names = zipEntryNames(bytes);
+  if (!names) return null;
+  const buffer = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const entries = new Map<string, string>();
+  let position = 0;
+  while (position + 30 <= buffer.length && buffer.readUInt32LE(position) === 0x04034b50) {
+    const method = buffer.readUInt16LE(position + 8);
+    const size = buffer.readUInt32LE(position + 18);
+    const nameLength = buffer.readUInt16LE(position + 26);
+    const extra = buffer.readUInt16LE(position + 28);
+    const name = buffer.toString("utf8", position + 30, position + 30 + nameLength);
+    const start = position + 30 + nameLength + extra;
+    if (method !== 0 || start + size > buffer.length) return null;
+    entries.set(name, buffer.toString("utf8", start, start + size));
+    position = start + size;
+  }
+  return entries;
+}
+
+/** A comment in a fake workbook: who wrote it, on which cell, and its text. */
+export interface FakeComment {
+  cell: string;
+  author: string;
+  text: string;
+}
+
+/** The part of a fake workbook that holds its comments (see minimalXlsx). */
+export const FAKE_COMMENTS_PART = "xl/comments1.xml";
+
+/** Reads the comments minimalXlsx wrote. */
+export function fakeComments(xml: string | undefined): FakeComment[] {
+  if (!xml) return [];
+  const unescape = (text: string) =>
+    text
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&amp;/g, "&");
+  return [...xml.matchAll(/<comment ref="([^"]*)" author="([^"]*)">([^<]*)<\/comment>/g)].map(
+    (m) => ({ cell: m[1]!, author: unescape(m[2]!), text: unescape(m[3]!) }),
+  );
+}
+
 /** A minimal, valid one-sheet XLSX package (used by the fake validator and by tests). */
-export function minimalXlsx(cells: Record<string, string> = {}): Uint8Array {
+export function minimalXlsx(
+  cells: Record<string, string> = {},
+  comments: FakeComment[] = [],
+): Uint8Array {
   const escape = (text: string) =>
     text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const rows = new Map<number, string[]>();
@@ -113,5 +164,15 @@ export function minimalXlsx(cells: Record<string, string> = {}): Uint8Array {
     "xl/_rels/workbook.xml.rels":
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
     "xl/worksheets/sheet1.xml": `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetData}</sheetData></worksheet>`,
+    ...(comments.length > 0
+      ? {
+          [FAKE_COMMENTS_PART]: `<comments>${comments
+            .map(
+              (c) =>
+                `<comment ref="${c.cell}" author="${escape(c.author).replace(/"/g, "&quot;")}">${escape(c.text)}</comment>`,
+            )
+            .join("")}</comments>`,
+        }
+      : {}),
   });
 }

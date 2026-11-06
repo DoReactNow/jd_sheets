@@ -11,16 +11,18 @@ export interface CollabRequestOptions {
   method?: "GET" | "POST";
   body?: BodyInit;
   contentType?: string;
+  headers?: Record<string, string>;
   timeoutMs?: number;
 }
 
 /** Calls an internal endpoint of the Rust service. Network failures and timeouts → 503. */
 export async function collabRequest(
   path: string,
-  { method = "GET", body, contentType, timeoutMs }: CollabRequestOptions = {},
+  { method = "GET", body, contentType, headers: extra = {}, timeoutMs }: CollabRequestOptions = {},
 ): Promise<Response> {
   const env = getEnv();
   const headers: Record<string, string> = {
+    ...extra,
     [COLLAB_INTERNAL_TOKEN_HEADER]: env.INTERNAL_SERVICE_TOKEN,
   };
   if (contentType) headers["content-type"] = contentType;

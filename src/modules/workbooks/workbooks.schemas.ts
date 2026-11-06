@@ -22,3 +22,73 @@ export const ifMatchSchema = z
   .string({ error: "This save is missing the version it was based on." })
   .transform((value) => value.trim().replace(/^W\//, "").replace(/^"|"$/g, ""))
   .pipe(z.uuid({ error: "This save is missing the version it was based on." }));
+
+export const LIST_SCOPES = ["mine", "shared", "recent", "all", "trash"] as const;
+export type ListScope = (typeof LIST_SCOPES)[number];
+
+export const listWorkbooksInput = z.object({
+  scope: z.enum(LIST_SCOPES, { error: "Choose a list." }).default("mine"),
+  q: z.string().trim().max(MAX, { error: "That search is too long." }).optional(),
+  sort: z.enum(["updated", "title"], { error: "Choose a sort." }).default("updated"),
+  dir: z.enum(["asc", "desc"], { error: "Choose a direction." }).optional(),
+  cursor: z.string().max(400).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type ListWorkbooksInput = z.output<typeof listWorkbooksInput>;
+
+/** A random id per editor page (tab), for the edit lease (Decision 52). */
+export const tabIdSchema = z
+  .string({ error: "Please reload the page." })
+  .regex(/^[A-Za-z0-9_-]{8,64}$/, { error: "Please reload the page." });
+
+export const leaseInput = z.object({
+  tabId: tabIdSchema,
+  takeOver: z.boolean().optional().default(false),
+});
+export type LeaseInput = z.output<typeof leaseInput>;
+
+export const releaseLeaseInput = z.object({ tabId: tabIdSchema });
+
+export const renameInput = z.object({ title: titleSchema });
+
+export const versionNameInput = z.object({
+  name: z
+    .string({ error: "Enter a name." })
+    .trim()
+    .max(APP_CONFIG.workbooks.versionNameMaxLength, {
+      error: `Names can be up to ${APP_CONFIG.workbooks.versionNameMaxLength} characters.`,
+    })
+    .refine((value) => !/\p{Cc}/u.test(value), { error: "Names can't contain special characters." })
+    .transform((value) => (value === "" ? null : value))
+    .nullable(),
+});
+
+export const versionListInput = z.object({ cursor: z.string().max(20).optional() });
+
+export const adminListInput = z.object({
+  q: z.string().trim().max(MAX).optional(),
+  ownerStatus: z.enum(["ACTIVE", "DEACTIVATED"]).optional(),
+});
+
+export const adminOpenInput = z.object({
+  reason: z
+    .string({ error: "Say why you need to open this workbook." })
+    .trim()
+    .min(5, { error: "Say why you need to open this workbook." })
+    .max(500, { error: "Keep the reason under 500 characters." }),
+});
+
+export const adminContentInput = z.object({ grant: z.string().max(40) });
+
+/** The original file name of an import, sent URL-encoded in a header. */
+export const importFileNameSchema = z
+  .string({ error: "Choose a file to import." })
+  .transform((value, ctx) => {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      ctx.addIssue({ code: "custom", message: "Choose a file to import." });
+      return z.NEVER;
+    }
+  })
+  .pipe(z.string().min(1, { error: "Choose a file to import." }).max(300));

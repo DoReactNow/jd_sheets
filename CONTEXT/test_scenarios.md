@@ -134,8 +134,8 @@ These apply to every endpoint, screen, job, table and Rust handler. A plan does 
 - **P0-ARCH-05** A `route.ts` without an access declaration fails the route-coverage test.
 
 ### Editor build
-- **P0-EDIT-01** The editor build never writes inside `vendor/gridcraft`.
-- **P0-EDIT-02** A patch that does not apply fails the build and names the patch.
+- **P0-EDIT-01** *(Retired by Decision 55: GridCraft is our own code, no patches.)* The editor build never writes inside `vendor/gridcraft`.
+- **P0-EDIT-02** *(Retired by Decision 55: GridCraft is our own code, no patches.)* A patch that does not apply fails the build and names the patch.
 - **P0-EDIT-03** The build records the GridCraft tag, commit and applied patches, shown on the diagnostics page.
 - **P0-EDIT-04** The editor is served from our own origin under `/editor/`, with GridCraft's licence files.
 - **P0-EDIT-05** With no patches, the built editor behaves exactly like upstream's web build.
@@ -401,7 +401,7 @@ These apply to every endpoint, screen, job, table and Rust handler. A plan does 
 - **P2-ROLE-09** Only the Owner can transfer ownership, trash or delete.
 
 ### Editor modes (patch 0001)
-- **P2-MODE-01** Patch 0001 applies to the pinned tag and names its upstream pull request.
+- **P2-MODE-01** *(Retired by Decision 55: GridCraft is our own code, no patches.)* Patch 0001 applies to the pinned tag and names its upstream pull request.
 - **P2-MODE-02** In view mode, typing, pasting, deleting, formatting, sheet changes, undo and Save do nothing, and the ribbon shows editing commands disabled.
 - **P2-MODE-03** In view mode the API also refuses any save (X-ACCESS-09).
 - **P2-MODE-04** In comment mode only comment commands work.
@@ -568,11 +568,11 @@ These apply to every endpoint, screen, job, table and Rust handler. A plan does 
 
 | ID | Question | Phase |
 |:---|:---|:---|
-| TQ-01 | Group deletion when shares use it: refuse, or remove its shares after a warning (P2-GROUP-03)? | 2 |
-| TQ-02 | Should link-only access show in "Shared with me" before the first open (P2-LINK-03)? | 2 |
-| TQ-03 | After an ownership transfer, does the old owner keep Editor access (P2-ADMINWB-02)? | 2 |
-| TQ-04 | Same person, two tabs, one lease: block the second tab or move the lease (P2-LEASE-08)? | 2 |
-| TQ-05 | Autosave timings (P2-SAVE-01) | 2 |
+| TQ-01 | Group deletion when shares use it: refuse, or remove its shares after a warning (P2-GROUP-03)? | 2 (answered: Decision 52) |
+| TQ-02 | Should link-only access show in "Shared with me" before the first open (P2-LINK-03)? | 2 (answered: Decision 52) |
+| TQ-03 | After an ownership transfer, does the old owner keep Editor access (P2-ADMINWB-02)? | 2 (answered: Decision 52) |
+| TQ-04 | Same person, two tabs, one lease: block the second tab or move the lease (P2-LEASE-08)? | 2 (answered: Decision 52) |
+| TQ-05 | Autosave timings (P2-SAVE-01) | 2 (answered: Decision 52) |
 | TQ-06 | Undo with live co-editing: own changes only (recommended), or everything (P3-PATCH-04)? | 3 |
 | TQ-07 | Rebasing rule per command type (P3-REBASE-03) | 3 |
 | TQ-08 | Maximum editors per workbook (P3-PERF-03) | 3 |

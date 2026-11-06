@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { WorkbookList } from "@/modules/workbooks/ui/WorkbookList";
 import { requirePageUser } from "@/shared/http/pageAccess";
 import { AppHeader } from "@/shared/ui/AppHeader";
@@ -8,7 +9,9 @@ export default async function HomePage() {
     <>
       <AppHeader principal={principal} />
       <main className="page">
-        <WorkbookList />
+        <Suspense>
+          <WorkbookList />
+        </Suspense>
       </main>
     </>
   );

@@ -241,26 +241,13 @@ docker compose -f docker/docker-compose.local.yml exec db psql -U jdsheets -c '\
 
 ---
 
-## 5. GridCraft, Patches and the Editor Build
+## 5. GridCraft and the Editor Build
 
-- GridCraft is the submodule at `vendor/gridcraft`, pinned to a release tag (`vendor/GRIDCRAFT_VERSION`). **Never edit it.**
-- `npm run editor:build` copies it to `.build/gridcraft`, applies `patches/gridcraft/*.patch` in order, runs `trunk build --release` with `public_url = "/editor/"`, and writes `public/editor/` with `build-info.json`.
-- Run `editor:build` again after: cloning, pulling a submodule bump, or changing a patch.
-- Standalone look at plain GridCraft: `npm run editor:serve` → `http://127.0.0.1:47325`.
-
-Update the submodule after pulling:
-
-```bash
-git submodule update --init --recursive
-```
-
-Check that nobody edited the vendored source:
-
-```bash
-npm run vendor:check
-```
-
----
+- GridCraft is **our own copy** at `vendor/gridcraft` (Decision 55), based on release v0.16.1 (`vendor/GRIDCRAFT_VERSION` records the starting point). Edit it directly; keep its `LICENSE-MIT`, `LICENSE-APACHE` and `NOTICE` files.
+- Our changes so far: the access modes (`apps/gridcraft-web/src/access.rs`, the `gridcraft:mode` and `gridcraft:saveNow` messages in `host.rs`) and ribbon greying (`Access` in `crates/ui-egui/src/lib.rs`, used in `ribbon.rs`).
+- `npm run editor:build` copies it to `.build/gridcraft`, runs `trunk build --release` with `public_url = "/editor/"`, and writes `public/editor/` with `build-info.json`. Run it again after cloning or changing anything in `vendor/gridcraft`.
+- `npm run editor:test` runs the tests of our GridCraft changes natively (`cargo test -p gridcraft-web`).
+- Standalone look at the editor: `npm run editor:serve` → `http://127.0.0.1:47325`.
 
 ## 6. The Rust Service
 

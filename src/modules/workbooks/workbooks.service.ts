@@ -10,16 +10,19 @@ import type { WorkbookRole } from "@/shared/rbac/workbookAccess";
 import { workbookVersionKey, WORKBOOKS_PREFIX, type FileStorage } from "@/shared/storage";
 import { toIsoInstant, type Clock } from "@/shared/time";
 import type { WorkbookValidator } from "@/shared/validator";
-import type { CreateWorkbookInput } from "./workbooks.schemas";
+import { resolveWorkbookRole, roleAllows } from "@/shared/rbac/workbookAccess";
+import type { CreateWorkbookInput, ListWorkbooksInput } from "./workbooks.schemas";
+import type { LeaseService } from "./workbooks.lease";
 import {
   StaleBaseVersionError,
   type WorkbookRow,
   type WorkbooksRepository,
 } from "./workbooks.repository";
-import type { SavedVersionDto, WorkbookDto } from "./workbooks.types";
+import type { SavedVersionDto, WorkbookDto, WorkbookPageDto } from "./workbooks.types";
 
 export interface WorkbooksServiceDeps {
   repository: WorkbooksRepository;
+  lease: LeaseService;
   storage: FileStorage;
   validator: WorkbookValidator;
   clock: Clock;
@@ -28,11 +31,37 @@ export interface WorkbooksServiceDeps {
 
 export type SaveSource = "SAVE" | "AUTOSAVE";
 
+function encodeCursor(value: string, id: string): string {
+  return Buffer.from(JSON.stringify([value, id])).toString("base64url");
+}
+
+function decodeCursor(cursor: string): { value: string; id: string } {
+  try {
+    const [value, id] = JSON.parse(Buffer.from(cursor, "base64url").toString()) as unknown[];
+    if (typeof value === "string" && typeof id === "string" && /^[0-9a-f-]{36}$/.test(id)) {
+      return { value, id };
+    }
+  } catch {
+    // fall through
+  }
+  throw new AppError("VALIDATION_FAILED", {
+    fieldErrors: [{ field: "cursor", message: "Please reload the list." }],
+  });
+}
+
+function sortValue(row: WorkbookRow, sort: "updated" | "title"): string {
+  return sort === "title"
+    ? row.title.toLowerCase()
+    : row.updatedAt.toISOString().replace("Z", "000").slice(0, 26);
+}
+
 function toDto(row: WorkbookRow, role: WorkbookRole): WorkbookDto {
   if (!row.currentVersion) throw new AppError("NOT_FOUND");
   return {
     id: row.id,
     title: row.title,
+    owner: row.owner,
+    trashedAt: row.trashedAt ? toIsoInstant(row.trashedAt) : null,
     sizeBytes: Number(row.sizeBytes),
     currentVersionId: row.currentVersion.id,
     currentVersionNumber: row.currentVersion.number,
@@ -42,12 +71,18 @@ function toDto(row: WorkbookRow, role: WorkbookRole): WorkbookDto {
   };
 }
 
+async function readAll(stream: Readable): Promise<Uint8Array> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk as Uint8Array));
+  return new Uint8Array(Buffer.concat(chunks));
+}
+
 function isUniqueViolation(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
 }
 
 export function createWorkbooksService(deps: WorkbooksServiceDeps) {
-  const { repository, storage, validator, clock, logger } = deps;
+  const { repository, lease, storage, validator, clock, logger } = deps;
 
   async function storeVersionFile(workbookId: string, bytes: Uint8Array) {
     const versionId = uuid7(clock);
@@ -105,10 +140,57 @@ export function createWorkbooksService(deps: WorkbooksServiceDeps) {
       return createWith(principal, title, bytes, "IMPORT");
     },
 
-    /** The caller's workbooks, newest change first (X-ACCESS-06). Phase 2 adds shared ones. */
-    async list(principal: Principal): Promise<WorkbookDto[]> {
-      const rows = await repository.listOwnedBy(principal.userId);
-      return rows.map((row) => toDto(row, "OWNER"));
+    /**
+     * A page of one list: mine, shared with me, all readable, Recent or Trash, with title search,
+     * sort and keyset paging (P2-LIST-01..03, P2-SHARE-09). Each row carries the caller's role.
+     */
+    async list(principal: Principal, input: ListWorkbooksInput): Promise<WorkbookPageDto> {
+      const withRoles = async (rows: WorkbookRow[]) => {
+        const roles = await Promise.all(rows.map((row) => resolveWorkbookRole(principal, row.id)));
+        return rows.flatMap((row, i) => (roles[i] ? [toDto(row, roles[i])] : []));
+      };
+      if (input.scope === "recent") {
+        const recent = await repository.listRecent(
+          principal.userId,
+          APP_CONFIG.workbooks.recentShown,
+          input.q,
+        );
+        const items = await withRoles(recent.map((r) => r.row));
+        const opened = new Map(recent.map((r) => [r.row.id, toIsoInstant(r.openedAt)]));
+        return {
+          items: items.map((item) => ({ ...item, openedAt: opened.get(item.id) })),
+          nextCursor: null,
+        };
+      }
+      const dir = input.dir ?? (input.sort === "title" ? "asc" : "desc");
+      const rows = await repository.listPage({
+        userId: principal.userId,
+        scope: input.scope,
+        q: input.q || undefined,
+        sort: input.sort,
+        dir,
+        after: input.cursor ? decodeCursor(input.cursor) : undefined,
+        limit: input.limit + 1,
+      });
+      const page = rows.slice(0, input.limit);
+      const last = page.at(-1);
+      return {
+        items: await withRoles(page),
+        nextCursor:
+          rows.length > input.limit && last
+            ? encodeCursor(sortValue(last, input.sort), last.id)
+            : null,
+      };
+    },
+
+    /** Notes an open for Recent (P2-LIST-03). */
+    async recordOpen(principal: Principal, workbookId: string): Promise<void> {
+      await repository.recordOpen(
+        principal.userId,
+        workbookId,
+        clock.now(),
+        APP_CONFIG.workbooks.recentKept,
+      );
     },
 
     async get(workbookId: string, role: WorkbookRole): Promise<WorkbookDto> {
@@ -147,19 +229,48 @@ export function createWorkbooksService(deps: WorkbooksServiceDeps) {
      */
     async save(
       principal: Principal,
+      role: WorkbookRole,
       workbookId: string,
       baseVersionId: string,
       bytes: Uint8Array,
       source: SaveSource,
+      tabId: string | null,
     ): Promise<SavedVersionDto> {
+      // The server is the lock: a Viewer never saves (P2-ROLE-02, P2-MODE-03).
+      if (!roleAllows(role, "comment")) throw new AppError("FORBIDDEN");
       if (bytes.byteLength > APP_CONFIG.workbooks.maxBytes)
         throw new AppError("WORKBOOK_TOO_LARGE");
       const current = await repository.findById(workbookId);
-      if (!current?.currentVersion) throw new AppError("NOT_FOUND");
+      if (!current?.currentVersion || current.trashedAt) throw new AppError("NOT_FOUND");
       // Cheap early answer; the transaction below is what really decides.
       if (current.currentVersion.id !== baseVersionId) throw new AppError("WORKBOOK_CHANGED");
 
-      await validator.validate(bytes);
+      if (roleAllows(role, "edit")) {
+        await lease.assertHolds(principal, workbookId, tabId);
+        await validator.validate(bytes);
+      } else {
+        // A Commenter saves comments only, never while someone is editing (Decision 54).
+        if (await lease.heldByOther(principal, workbookId)) throw new AppError("WORKBOOK_LOCKED");
+        await validator.validate(bytes);
+        const base = await storage.get(current.currentVersion.storageKey);
+        if (!base) throw new AppError("INTERNAL");
+        const kind = await validator.diffKind(
+          await readAll(base.body),
+          bytes,
+          principal.displayName,
+        );
+        if (kind === "NONE") {
+          return {
+            versionId: current.currentVersion.id,
+            number: current.currentVersion.number,
+            sizeBytes: Number(current.currentVersion.sizeBytes),
+            savedAt: toIsoInstant(current.updatedAt),
+          };
+        }
+        if (kind !== "COMMENTS_ONLY") {
+          throw new AppError("COMMENTS_ONLY", { logContext: { workbookId, kind } });
+        }
+      }
       const { versionId, storageKey, stored } = await storeVersionFile(workbookId, bytes);
       const now = clock.now();
       try {

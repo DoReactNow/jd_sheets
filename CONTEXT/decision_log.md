@@ -142,7 +142,7 @@ Three processes in production (app, worker, collab) plus Postgres and Caddy. The
 
 ---
 
-### Decision 8: Changes GridCraft Needs: Proposed Upstream, Patched Locally Meanwhile
+### Decision 8 (superseded by Decision 55): Changes GridCraft Needs: Proposed Upstream, Patched Locally Meanwhile
 
 **Date:** 2026-11-06
 **Status:** Accepted (owner chose the recommendation)
@@ -763,3 +763,65 @@ Because office addresses change, a change can leave everyone outside the allowed
 - **Docker images are built only in Phase 4** (go-live) or in CI, not per phase locally.
 - Rust and editor builds run only when GridCraft or the Rust code changes; background servers are stopped as soon as they are not needed.
 - Progress is shown in the session's task list with a percentage per task.
+
+---
+
+## I. Phase 2 decisions
+
+### Decision 52: Phase 2 Open Questions Answered (TQ-01 to TQ-05)
+
+**Date:** 2026-11-06
+**Status:** Accepted (owner: "Go, as recommended")
+
+#### Decision
+- **Deleting a group with shares (TQ-01, P2-GROUP-03):** the admin sees a warning listing the workbooks the group is shared on; confirming deletes the group and those shares in one transaction, audited. Without the confirmation flag the API answers `GROUP_IN_USE` with the count.
+- **Company link in lists (TQ-02, P2-LINK-03):** a workbook reachable only through the company link appears in "Shared with me" and Recent only after the person has opened the link once (recorded as a link visit). Search follows the same rule.
+- **Ownership transfer (TQ-03, P2-ADMINWB-02):** the old owner keeps a direct **Editor** grant; the new owner can remove it.
+- **Same person, two tabs (TQ-04, P2-LEASE-08):** the lease belongs to one page (a lease id per tab), not to the person. A second tab opens in view mode with "You are editing this in another tab" and a "Move editing here" button, which takes the lease over explicitly; the first tab drops to view mode on its next renewal.
+- **Autosave (TQ-05, P2-SAVE-01):** save 5 seconds after the last change, and at most 30 seconds after the first unsaved change while editing continues. Both values live in the single source of truth.
+
+---
+
+### Decision 53: Patch 0001 Upstream Pull Request Opened by the Owner
+
+**Date:** 2026-11-06
+**Status:** Accepted (owner: "Go, as recommended")
+
+#### Decision
+- Claude writes `patches/gridcraft/0001-access-mode.patch` and the upstream pull request text (`patches/gridcraft/0001-access-mode.upstream.md`). The owner opens the pull request on `storytold/gridcraft` (or tells Claude to open it from `DoReactNow`).
+- Until then the patch header reads `Upstream: pending (see 0001-access-mode.upstream.md)`; the patch check (P2-MODE-01) accepts `pending` only together with that file, and Phase 4 acceptance requires a real link.
+- **Done 2026-11-06** (owner: "Yes, open it"): https://github.com/storytold/gridcraft/pull/3463, from the `DoReactNow` fork. Upstream had moved its bridge to `craft-web-host`, so the pull request carries the gate and `?mode=`. The `gridcraft:mode` and `gridcraft:saveNow` messages need a `storytold/craft-libs` change first and are offered as a follow-up (details in `0001-access-mode.upstream.md`).
+
+---
+
+### Decision 54: Phase 2 Details Settled While Building
+
+**Date:** 2026-11-06
+**Status:** Accepted
+
+#### Decision
+- **Patch 0001 works after each frame, inside `apps/gridcraft-web` only.** GridCraft's UI calls the engine directly in about 60 places, so there is no single command gate within the allowed patch area. The patch's `access` module compares the workbook after every frame with what the mode allows and puts back anything else (view: nothing may change; comment: only the user's own comments and notes, plus their replies to others' threads), with a short notice. What a person only looks at (active sheet, zoom, scroll, page view) is never put back. In view mode Save hands no workbook to the page. **Not done:** greying out the ribbon's editing commands (part of P2-MODE-02); that needs a hook in `gridcraft-ui-egui` (outside Decision 8's area) and is offered upstream as a follow-up. The patch's tests run natively (`cargo test -p gridcraft-web` on the patched copy).
+- **Commenter saves:** checked by the Rust service (`POST /internal/workbooks/diff-kind`), which rewrites both versions once through GridCraft and compares content without comments and view settings. The comment author is the display name the editor writes (`?author=`). A Commenter's save waits (`WORKBOOK_LOCKED`) while someone else holds the edit lease, so an editor's work is never overtaken.
+- **Shares and link visits cascade with their workbook** (amends database_schema.md 3.14 "Restrict"), so deleting a workbook for good needs no call from `workbooks` into `sharing` (no circular dependency). Grant roles use a `share_role` enum without `OWNER`.
+- **Deleting for good** works only from the Trash. **Any request through the company link** counts as opening it (Decision 52's "first open").
+- **Administrator open:** the audit event's id is the permission to read the content for 15 minutes, in view mode; each open writes a new event.
+- **Imports** are converted by the Rust service (`POST /internal/workbooks/convert`) with GridCraft's readers; the original name comes in the `x-file-name` header.
+- **Editor tab id** (`x-editor-tab`) identifies the page holding the lease; `EDITING_ELSEWHERE` is a new catalog code for "you are editing in another tab".
+
+---
+
+### Decision 55: GridCraft Is Our Own Code
+
+**Date:** 2026-11-06
+**Status:** Accepted (owner: JD Sheets is internal only and will never be sold; "let's go with your recommendation" on all three questions). **Supersedes Decision 8 and Decision 53; amends Decisions 6 and 54.**
+
+#### Decision
+- `vendor/gridcraft` is a plain folder in our repository, no longer a submodule, and we edit it directly. Our copy is based on v0.16.1. Patch 0001 is folded in, and `patches/gridcraft/` is gone.
+- We do not contribute upstream. The pull request storytold/gridcraft#3463 was closed with a short note, and the `DoReactNow/gridcraft` fork is to be deleted (the owner does this, see below).
+- We stay on v0.16.1. There are no automatic updates: the weekly upstream job, its verify workflow, `upstream-bump.mjs` and the vendor-clean check are removed. If we ever need a specific fix from a GridCraft release, we copy it in by hand with a test.
+- We keep GridCraft's `LICENSE-MIT`, `LICENSE-APACHE` and `NOTICE` files (the MIT/Apache licence allows private, modified, internal use, and asks only for that).
+- Boundaries that stay: only `src/modules/editor/bridge/` names GridCraft messages, and only `services/collab/src/engine/` imports GridCraft crates.
+- `npm run editor:test` runs the tests of our GridCraft changes.
+- **Ribbon greying (completes P2-MODE-02):** `SheetApp` has an `access` setting (`Edit`, `Comment`, `View`). In view mode the ribbon disables every tab except View; in comment mode it also leaves Review usable. The after-each-frame rule of Decision 54 still applies everywhere else (keyboard, formula bar, context menus).
+- **Phase 3:** the planned "patch 0002" (command messages) becomes direct changes, including to GridCraft's engine and UI where that is simpler.
+- **Scenarios retired:** P0-EDIT-01 and P0-EDIT-02 (patches apply, and a broken patch names itself) and P2-MODE-01 (each patch names its upstream pull request) no longer apply.

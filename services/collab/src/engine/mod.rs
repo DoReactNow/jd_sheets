@@ -14,6 +14,8 @@ use serde::Serialize;
 
 use crate::config::Limits;
 
+pub mod diff;
+
 /// The name GridCraft uses to pick the format; never a user's file name.
 const BOOK_NAME: &str = "Book.xlsx";
 
@@ -52,6 +54,57 @@ pub fn open_xlsx(bytes: &[u8], limits: &Limits) -> Result<Workbook, EngineFailur
             Err(EngineFailure::Unreadable)
         }
     }
+}
+
+/// Opens bytes GridCraft can read in the format `name`'s extension names (our own output, or a
+/// file already size-checked by the caller). A panic is a refusal, never a crash.
+pub(crate) fn open_any(name: &str, bytes: &[u8]) -> Result<Workbook, EngineFailure> {
+    match catch_unwind(AssertUnwindSafe(|| open_bytes(name, bytes))) {
+        Ok(Ok((workbook, _warnings))) if !workbook.sheets.is_empty() => Ok(workbook),
+        Ok(Ok(_)) | Ok(Err(_)) => Err(EngineFailure::Unreadable),
+        Err(_) => {
+            tracing::error!("GridCraft panicked while opening a workbook");
+            Err(EngineFailure::Unreadable)
+        }
+    }
+}
+
+/// The formats an import may be in (P2-IMPORT-01). Everything is stored as XLSX.
+pub const IMPORT_EXTENSIONS: &[&str] = &["xlsx", "xlsb", "ods", "csv", "tsv"];
+
+/// Converts an imported file (`extension` is one of [`IMPORT_EXTENSIONS`]) to XLSX bytes written
+/// by GridCraft. The content sniffing must agree with the extension for binary formats, so a
+/// renamed file is refused rather than misread (P2-IMPORT-02).
+pub fn convert_to_xlsx(bytes: &[u8], extension: &str, limits: &Limits) -> Result<Vec<u8>, EngineFailure> {
+    if bytes.len() as u64 > limits.workbook_max_bytes {
+        return Err(EngineFailure::TooLarge);
+    }
+    let extension = extension.to_ascii_lowercase();
+    if !IMPORT_EXTENSIONS.contains(&extension.as_str()) {
+        return Err(EngineFailure::Unreadable);
+    }
+    let workbook = match extension.as_str() {
+        "xlsx" => open_xlsx(bytes, limits)?,
+        "xlsb" | "ods" => {
+            match sniff(bytes) {
+                Format::Encrypted => return Err(EngineFailure::PasswordProtected),
+                Format::Xlsb if extension == "xlsb" => {}
+                Format::Ods if extension == "ods" => {}
+                _ => return Err(EngineFailure::Unreadable),
+            }
+            check_archive(bytes, limits)?;
+            open_any(&format!("Book.{extension}"), bytes)?
+        }
+        // Text: must be UTF-8 (with or without a byte order mark) and contain no NUL bytes.
+        _ => {
+            let text = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
+            if std::str::from_utf8(text).is_err() || text.contains(&0) {
+                return Err(EngineFailure::Unreadable);
+            }
+            open_any(&format!("Book.{extension}"), bytes)?
+        }
+    };
+    to_xlsx(&workbook)
 }
 
 /// ZIP bomb and sanity guard, before GridCraft reads anything: the archive must open, hold a

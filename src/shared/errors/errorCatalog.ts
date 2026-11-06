@@ -43,6 +43,38 @@ export const ERROR_CATALOG = {
     message:
       "This workbook was changed since you opened it. Reload the latest version or save yours as a copy.",
   },
+  EDITING_ELSEWHERE: {
+    status: 423,
+    message:
+      "You are editing this workbook in another tab. Switch editing to this tab to continue here.",
+  },
+  WORKBOOK_LOCKED: {
+    status: 423,
+    message:
+      "Someone else is editing this workbook right now. You can view it and refresh to try again.",
+  },
+  COMMENTS_ONLY: {
+    status: 403,
+    message:
+      "You can add comments to this workbook, but not change its content or other people's comments.",
+  },
+  DOWNLOAD_DISABLED: {
+    status: 403,
+    message: "The owner has turned off downloads for this workbook.",
+  },
+  FILE_TYPE_NOT_SUPPORTED: {
+    status: 415,
+    message: "This kind of file can't be imported. Use .xlsx, .xlsb, .ods, .csv or .tsv.",
+  },
+  SHARE_TARGET_INVALID: {
+    status: 400,
+    message: "You can only share with active colleagues and groups (not with yourself).",
+  },
+  GROUP_NAME_TAKEN: { status: 409, message: "A group with this name already exists." },
+  GROUP_IN_USE: {
+    status: 409,
+    message: "This group is used to share workbooks. Confirm to delete it and remove those shares.",
+  },
   OTP_INVALID: { status: 400, message: "That code isn't right. Check it and try again." },
   OTP_EXPIRED: {
     status: 400,

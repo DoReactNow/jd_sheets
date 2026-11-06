@@ -15,4 +15,3 @@ coverage
 !.env.production.example
 prisma/private
 .git
-vendor/gridcraft/.git

@@ -4,7 +4,7 @@ Paste this at the start of every new coding session.
 
 ---
 
-You are working on **JD Sheets**, JD Fusion's internal, IP-restricted, collaborative web spreadsheet. It wraps the open-source GridCraft spreadsheet (vendored at `vendor/gridcraft`, never edited) with sign-in, approval, sharing, version history and live co-editing. The app is Next.js + TypeScript; one small Rust service runs GridCraft's engine on the server. All planning lives in the `CONTEXT/` folder. The docs are the source of truth. Do not work from memory or assumptions.
+You are working on **JD Sheets**, JD Fusion's internal, IP-restricted, collaborative web spreadsheet. It is built on our own copy of the open-source GridCraft spreadsheet (at `vendor/gridcraft`, edited directly, Decision 55) with sign-in, approval, sharing, version history and live co-editing. The app is Next.js + TypeScript; one small Rust service runs GridCraft's engine on the server. All planning lives in the `CONTEXT/` folder. The docs are the source of truth. Do not work from memory or assumptions.
 
 ## 1. Read before doing anything
 
@@ -26,7 +26,7 @@ Then read what the current work needs:
 | Planning or building a phase, or writing its tests | `CONTEXT/test_scenarios.md`: that phase's section and "Rules for every feature" |
 | Production operations | `CONTEXT/runbook.md` |
 
-Before planning, also read the existing code in the area you will change, and when GridCraft is involved, the relevant code in `vendor/gridcraft` (read only).
+Before planning, also read the existing code in the area you will change, and when GridCraft is involved, the relevant code in `vendor/gridcraft`.
 
 ## 2. Ask first when something is needed from me
 
@@ -35,7 +35,7 @@ Before you plan or write code, stop and ask me (one short list) if:
 - The phase needs a decision that is still **Open** in `decision_log.md`.
 - A requirement is unclear, two documents disagree, or the docs disagree with the code.
 - The work needs something only I can provide: accounts, passwords, IP ranges, domains, the GitHub repository, the VPS, approval to spend money.
-- You want to change or add an architectural decision, or change GridCraft behaviour (a new patch).
+- You want to change or add an architectural decision, or make a large change to how GridCraft works.
 
 Log my answer in `decision_log.md` (and update affected documents) **before** building on it. Never guess on these points.
 
@@ -55,7 +55,7 @@ Log my answer in `decision_log.md` (and update affected documents) **before** bu
 ## 4. Non-negotiable rules (details in the docs)
 
 - Test first for the risky core (Decision 24). `test_scenarios.md` lists what must be true; add new edge cases and production bugs to it in the same change.
-- **Never edit `vendor/gridcraft`.** Changes go through `patches/gridcraft/` with an upstream pull request (Decision 8).
+- **GridCraft is our own code** (Decision 55): edit `vendor/gridcraft` directly, keep its licence and notice files, and test changes there with `npm run editor:test`. We do not send changes upstream.
 - **The server is the lock.** Every role rule is enforced by the server and tested by calling the API directly.
 - A workbook someone cannot access is `NOT_FOUND`, never `FORBIDDEN`, and never appears in their lists.
 - Only `@jdfusion.in` emails, everywhere.

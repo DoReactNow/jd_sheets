@@ -13,7 +13,7 @@ The reference for business rules, architecture, roles and permissions, environme
 | Allowed email domain | `jdfusion.in`, everywhere (Decision 12) |
 | Users | JD Fusion staff only, on approved networks |
 | Business timezone | `Asia/Kolkata` |
-| Spreadsheet engine and UI | GridCraft (open source, Rust, MIT or Apache-2.0), vendored at `vendor/gridcraft`, never edited (Decision 6) |
+| Spreadsheet engine and UI | GridCraft (open source, Rust, MIT or Apache-2.0), our own copy at `vendor/gridcraft`, based on v0.16.1 and edited directly (Decisions 6, 55) |
 | App stack | Next.js 16, TypeScript strict, Prisma 7, PostgreSQL 17, pg-boss, Zod, Luxon |
 | Engine and collaboration service | Rust (edition 2024), axum, tokio, sqlx, `gridcraft-engine` |
 | Hosting | Hostinger VPS, Docker Compose, Caddy (Decision 37) |
@@ -153,8 +153,7 @@ Frontend (React) ↔ route.ts ↔ Controller ↔ Service ↔ Repository ↔ Data
 ```
 jd-sheets/
 ├── CONTEXT/                     # this documentation
-├── vendor/gridcraft/            # git submodule, pinned release tag, NEVER edited
-├── patches/gridcraft/           # NNNN-name.patch, each naming its upstream PR (Decision 8)
+├── vendor/gridcraft/            # our own GridCraft (based on v0.16.1), edited directly (Decision 55)
 ├── contracts/                   # shared fixtures read by TS and Rust tests (collab token, bridge messages)
 ├── golden/                      # golden workbooks for upgrade tests (no real company data)
 ├── services/collab/             # Rust service (own Cargo workspace)
@@ -162,7 +161,7 @@ jd-sheets/
 │   └── src/ main.rs lib.rs config.rs error.rs clock.rs token.rs ip.rs http.rs
 │            engine/ (the only gridcraft-engine user)   ws/, ops/, store/ (Phase 3)
 ├── scripts/
-│   ├── editor-build.mjs         # copy submodule → .build/gridcraft, apply patches, trunk build → public/editor
+│   ├── editor-build.mjs         # copy vendor/gridcraft → .build/gridcraft, trunk build → public/editor
 │   └── ...
 ├── prisma/  schema.prisma  migrations/  seed-test.ts  seed-dev.ts  private/ (git-ignored)
 ├── src/
@@ -181,7 +180,7 @@ jd-sheets/
 
 | Module | Owns | Phase |
 |:---|:---|:---|
-| `system` | Health, diagnostics, version info (app, editor, GridCraft tag, patches applied) | 0 |
+| `system` | Health, diagnostics, version info (app, editor, the GridCraft release our copy is based on) | 0 |
 | `workbooks` | Workbooks, versions, storage keys, validation calls, trash, edit leases, the file list | 0 (core), 2 (rest) |
 | `editor` | The editor host page, the bridge protocol, editor modes | 0 (bridge), 2 (modes), 3 (commands) |
 | `identity` | Users, sign-up, OTPs, approval, sessions, passwords, groups, roles | 1 (groups in 2) |
@@ -211,13 +210,13 @@ jd-sheets/
 | `gridcraft:save { name, bytes }` | editor → page | User saved (Ctrl/Cmd+S, File › Save); page `PUT`s `.xlsx` with `If-Match`; other files (PDF export) are downloaded | 0 |
 | `gridcraft:dirty { dirty }` | editor → page | Unsaved state changed; page shows it | 0 |
 | URL `?host=parent&chrome=notitlebar&author=…` | page → editor | On load: host mode, GridCraft's title bar hidden, comment author (Decision 43) | 0 |
-| `gridcraft:saveNow` | page → editor | Ask the editor to save, for autosave (patch 0001, Decision 43) | 2 |
+| `gridcraft:saveNow` | page → editor | Ask the editor to save, for autosave (access mode, Decisions 43, 54); ignored in view mode | 2 |
 | `gridcraft:failed { error }` | editor → page | Editor could not start; page shows a friendly message | 0 |
-| URL `?mode=view\|comment\|edit` | page → editor | On load (patch 0001) | 2 |
-| `gridcraft:mode { mode }` | page → editor | Role or lease changed while open (patch 0001) | 2 |
-| `gridcraft:command { seq, id, params }` | editor → page | Every engine command run locally (patch 0002) | 3 |
-| `gridcraft:apply { seq, id, params }` | page → editor | A command from another person (patch 0002) | 3 |
-| `gridcraft:resync { bytes, seq }` | page → editor | Reload after a rejected command (patch 0002) | 3 |
+| URL `?mode=view\|comment\|edit` | page → editor | On load (access mode; also greys out the ribbon, Decision 55) | 2 |
+| `gridcraft:mode { mode }` | page → editor | Role or lease changed while open (access mode); changes the mode does not allow are put back after each frame (Decision 54) | 2 |
+| `gridcraft:command { seq, id, params }` | editor → page | Every engine command run locally (Phase 3 GridCraft change) | 3 |
+| `gridcraft:apply { seq, id, params }` | page → editor | A command from another person (Phase 3 GridCraft change) | 3 |
+| `gridcraft:resync { bytes, seq }` | page → editor | Reload after a rejected command (Phase 3 GridCraft change) | 3 |
 
 The bridge validates every message (origin, shape, size) and ignores anything else.
 

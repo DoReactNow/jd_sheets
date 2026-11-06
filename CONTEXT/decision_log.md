@@ -896,3 +896,42 @@ Because office addresses change, a change can leave everyone outside the allowed
   - Others' selections are drawn in the grid by our GridCraft (`SheetApp::remote_selections`).
 - **Measured (P3-PERF-01):** 20 editors, delivery p95 9 ms (hardening_results.md).
 - **Not done in Phase 3:** a Viewer's refused changes are logged by the service, not written to the audit trail (P3-ROLE-01's "audited"). The service has no database access; Phase 4 can add an internal audit route if wanted.
+
+---
+
+## K. Phase 4 decisions
+
+### Decision 59: Phase 4 Owner Answers (Q-05 to Q-07, TQ-10)
+
+**Date:** 2026-11-06
+**Status:** Accepted (owner's answers; some details arrive later, marked *pending*)
+
+#### Decision
+- **Domain (Q-05):** `sheets.jdfusion.in`.
+  - `jdfusion.in` is registered at **GoDaddy**, which manages its DNS. The CRM already runs at `crm.jdfusion.in`, probably on the same Hostinger VPS.
+  - *Pending:* the owner gets GoDaddy access, then adds an A record for `sheets` pointing to the VPS.
+- **Server (Q-07):** the owner's existing **Hostinger KVM 2** (2 vCPU, 8 GB RAM, 100 GB disk), Ubuntu 24.04 (`srv968172.hstgr.cloud`).
+  - It is **shared**: it already runs **n8n** in Docker (Hostinger's n8n template), and probably the CRM.
+  - When checked, it was using 61% of memory and 35 GB of disk.
+  - Two Hostinger snapshots exist; no Hostinger firewall rules are set.
+- **Who runs it:** Claude writes everything: setup and deploy scripts, a step-by-step guide, and the runbook. The owner runs each step on the server, guided in a session.
+- **Backups (Q-06):** **Google Drive**, plus a local copy on the VPS.
+  - Only the Google Drive copy counts as off-server (P4-BACKUP-01).
+  - The local copy is for quick restores.
+  - Backups are encrypted before upload.
+- **Sign-up emails (Decision 47):** a Google account of the company, for example `sheets@jdfusion.in`, with an app password. The owner sets it up, guided. Until then the fake mailer stays.
+- **Alerts:** email to the owner (the address is confirmed when the mailer is set up).
+- **Office networks:** *pending.* The owner provides the office and VPN public IPs; they become the bootstrap network rules (`BOOTSTRAP_ALLOWED_CIDRS`).
+- **Load test (TQ-10):**
+  - about **30 staff** and **20 people editing one workbook at once** (Decision 56);
+  - largest workbook today **8,000–10,000 rows**. The load test uses 10,000 rows and a 50 MB workbook (the limit) as the stress case.
+
+#### Consequences for the Phase 4 plan (to settle when planning)
+- **Sharing the server:**
+  - Ports 80 and 443 are probably already taken by the reverse proxy in front of n8n and the CRM (Traefik in Hostinger's n8n template, or another). So JD Sheets' Caddy cannot simply take them.
+  - The plan must first inspect the server (`docker ps`, what listens on 80 and 443) and then either:
+    - add `sheets.jdfusion.in` to the existing proxy; or
+    - put one shared proxy in front of all three.
+  - The IP allowlist then lives in the app's network rules (already the real wall, Decision 46) rather than in Caddy.
+- **Memory:** with 61% already used, JD Sheets' containers get memory limits. Rough budget: Postgres 512 MB, app 768 MB, worker 256 MB, Rust service 1 GB (P4-LOAD-03). The load test checks the whole server stays healthy.
+- **Hostinger snapshots** are a useful extra before each deploy, but not a replacement for the encrypted off-server backup.

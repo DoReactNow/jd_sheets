@@ -511,6 +511,13 @@ Detailed work items are written when each phase starts (Decision 36).
 
 **Scope:** load test (concurrent editors per workbook, open workbooks per service, save sizes), memory limits for the Rust service; security review (headers, CSP, cookies, rate limits, dependency audit, `cargo audit`); monitoring and alerts; structured logs; backups with a restore drill; VPS setup (firewall, SSH keys, Docker, Caddy on the real domain); deployment pipeline with automatic migrations; `runbook.md` and `hardening_results.md` completed; owner acceptance.
 
-**Needs from the owner:** domain and DNS (Q-05), backup target (Q-06), VPS plan (Q-07).
+**Owner answers (Decision 59):**
+- **Domain:** `sheets.jdfusion.in`, DNS at GoDaddy.
+- **Server:** the existing Hostinger KVM 2, shared with n8n and probably the CRM.
+- **Backups:** Google Drive, plus a local copy on the VPS.
+- **Alerts:** email to the owner.
+- **Load test:** 30 staff, 20 editing one workbook at once, largest workbook about 10,000 rows.
+
+**Still pending from the owner:** GoDaddy access (DNS record), the office and VPN IPs, the Google account and app password for sign-up emails. **Next step:** plan Phase 4 in a new session, starting by inspecting the server (what already uses ports 80 and 443, and memory).
 
 **What you will see:** JD Sheets live on its domain, reachable only from the office networks.

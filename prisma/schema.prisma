@@ -54,20 +54,32 @@ enum WorkbookVersionSource {
 
 // Owner: workbooks. The file bytes live in FileStorage, never here (Decision 19).
 model Workbook {
-  id               String            @id @default(uuid(7)) @db.Uuid
-  title            String            @db.VarChar(200)
+  id                      String            @id @default(uuid(7)) @db.Uuid
+  title                   String            @db.VarChar(200)
   // Null only for Phase 0 development workbooks whose owner never existed (Decision 48).
-  ownerId          String?           @map("owner_id") @db.Uuid
-  owner            User?             @relation("WorkbookOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  currentVersionId String?           @unique @map("current_version_id") @db.Uuid
-  currentVersion   WorkbookVersion?  @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: Restrict)
-  sizeBytes        BigInt            @default(0) @map("size_bytes")
-  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
-  versions         WorkbookVersion[] @relation("Versions")
+  ownerId                 String?           @map("owner_id") @db.Uuid
+  owner                   User?             @relation("WorkbookOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  currentVersionId        String?           @unique @map("current_version_id") @db.Uuid
+  currentVersion          WorkbookVersion?  @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: Restrict)
+  sizeBytes               BigInt            @default(0) @map("size_bytes")
+  // Company link (Phase 2): the role anyone active gets by opening the link; null = off.
+  linkRole                ShareRole?        @map("link_role")
+  // Viewers and Commenters may download and export (Phase 2).
+  allowDownloadForReaders Boolean           @default(true) @map("allow_download_for_readers")
+  trashedAt               DateTime?         @map("trashed_at") @db.Timestamptz(3)
+  trashedById             String?           @map("trashed_by_id") @db.Uuid
+  trashedBy               User?             @relation("WorkbookTrashedBy", fields: [trashedById], references: [id], onDelete: Restrict)
+  createdAt               DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  versions                WorkbookVersion[] @relation("Versions")
+  lease                   EditLease?
+  recentOpens             RecentOpen[]
+  grants                  ShareGrant[]
+  linkOpens               LinkOpen[]
 
   @@index([ownerId, updatedAt(sort: Desc)])
   @@index([updatedAt(sort: Desc)])
+  @@index([trashedAt])
   @@map("workbooks_workbooks")
 }
 
@@ -91,6 +103,35 @@ model WorkbookVersion {
   @@unique([workbookId, number])
   @@index([workbookId, createdAt(sort: Desc)])
   @@map("workbooks_versions")
+}
+
+// Owner: workbooks. One edit lease per workbook (Decision 52: it belongs to one page, `tabId`).
+model EditLease {
+  workbookId String   @id @map("workbook_id") @db.Uuid
+  workbook   Workbook @relation(fields: [workbookId], references: [id], onDelete: Cascade)
+  userId     String   @map("user_id") @db.Uuid
+  user       User     @relation("LeaseHolder", fields: [userId], references: [id], onDelete: Restrict)
+  sessionId  String   @map("session_id") @db.Uuid
+  session    Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  tabId      String   @map("tab_id") @db.VarChar(64)
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("workbooks_edit_leases")
+}
+
+// Owner: workbooks. The workbooks a person opened lately (newest 50 kept).
+model RecentOpen {
+  userId     String   @map("user_id") @db.Uuid
+  user       User     @relation("RecentOpener", fields: [userId], references: [id], onDelete: Restrict)
+  workbookId String   @map("workbook_id") @db.Uuid
+  workbook   Workbook @relation(fields: [workbookId], references: [id], onDelete: Cascade)
+  openedAt   DateTime @map("opened_at") @db.Timestamptz(3)
+
+  @@id([userId, workbookId])
+  @@index([userId, openedAt(sort: Desc)])
+  @@map("workbooks_recent_opens")
 }
 
 // ---------------------------------------------------------------------------
@@ -123,30 +164,39 @@ enum GrantSource {
 
 // Owner: identity. Emails are lower-case and only @jdfusion.in (check constraint in the migration).
 model User {
-  id                 String       @id @default(uuid(7)) @db.Uuid
-  email              String       @unique
-  displayName        String       @map("display_name") @db.VarChar(100)
-  passwordHash       String       @map("password_hash")
+  id                 String        @id @default(uuid(7)) @db.Uuid
+  email              String        @unique
+  displayName        String        @map("display_name") @db.VarChar(100)
+  passwordHash       String        @map("password_hash")
   status             UserStatus
-  roleId             String?      @map("role_id") @db.Uuid
-  role               Role?        @relation(fields: [roleId], references: [id], onDelete: Restrict)
-  mustChangePassword Boolean      @default(false) @map("must_change_password")
-  failedSignInCount  Int          @default(0) @map("failed_sign_in_count")
-  lockedUntil        DateTime?    @map("locked_until") @db.Timestamptz(3)
-  signupSource       SignupSource @map("signup_source")
-  rejectedBefore     Boolean      @default(false) @map("rejected_before")
-  approvedById       String?      @map("approved_by_id") @db.Uuid
-  rejectedById       String?      @map("rejected_by_id") @db.Uuid
-  approvedAt         DateTime?    @map("approved_at") @db.Timestamptz(3)
-  rejectedAt         DateTime?    @map("rejected_at") @db.Timestamptz(3)
-  deactivatedAt      DateTime?    @map("deactivated_at") @db.Timestamptz(3)
-  lastSignInAt       DateTime?    @map("last_sign_in_at") @db.Timestamptz(3)
-  passwordChangedAt  DateTime?    @map("password_changed_at") @db.Timestamptz(3)
-  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  roleId             String?       @map("role_id") @db.Uuid
+  role               Role?         @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  mustChangePassword Boolean       @default(false) @map("must_change_password")
+  failedSignInCount  Int           @default(0) @map("failed_sign_in_count")
+  lockedUntil        DateTime?     @map("locked_until") @db.Timestamptz(3)
+  signupSource       SignupSource  @map("signup_source")
+  rejectedBefore     Boolean       @default(false) @map("rejected_before")
+  approvedById       String?       @map("approved_by_id") @db.Uuid
+  rejectedById       String?       @map("rejected_by_id") @db.Uuid
+  approvedAt         DateTime?     @map("approved_at") @db.Timestamptz(3)
+  rejectedAt         DateTime?     @map("rejected_at") @db.Timestamptz(3)
+  deactivatedAt      DateTime?     @map("deactivated_at") @db.Timestamptz(3)
+  lastSignInAt       DateTime?     @map("last_sign_in_at") @db.Timestamptz(3)
+  passwordChangedAt  DateTime?     @map("password_changed_at") @db.Timestamptz(3)
+  createdAt          DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
   sessions           Session[]
-  workbooks          Workbook[]   @relation("WorkbookOwner")
+  workbooks          Workbook[]    @relation("WorkbookOwner")
   auditEvents        AuditEvent[]
+  trashedWorkbooks   Workbook[]    @relation("WorkbookTrashedBy")
+  leases             EditLease[]   @relation("LeaseHolder")
+  recentOpens        RecentOpen[]  @relation("RecentOpener")
+  groupsCreated      Group[]       @relation("GroupCreatedBy")
+  memberships        GroupMember[] @relation("GroupMember")
+  membershipsAdded   GroupMember[] @relation("GroupMemberAddedBy")
+  grants             ShareGrant[]  @relation("GrantUser")
+  grantsCreated      ShareGrant[]  @relation("GrantCreatedBy")
+  linkOpens          LinkOpen[]
 
   @@index([status, createdAt])
   @@map("identity_users")
@@ -154,17 +204,18 @@ model User {
 
 // Owner: identity. Only the SHA-256 hash of the cookie token is stored.
 model Session {
-  id                String    @id @default(uuid(7)) @db.Uuid
-  userId            String    @map("user_id") @db.Uuid
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash         String    @unique @map("token_hash") @db.Char(64)
-  ip                String?   @db.VarChar(45)
-  userAgent         String?   @map("user_agent") @db.VarChar(300)
-  expiresAt         DateTime  @map("expires_at") @db.Timestamptz(3)
-  absoluteExpiresAt DateTime  @map("absolute_expires_at") @db.Timestamptz(3)
-  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(3)
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  lastSeenAt        DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  id                String      @id @default(uuid(7)) @db.Uuid
+  userId            String      @map("user_id") @db.Uuid
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash         String      @unique @map("token_hash") @db.Char(64)
+  ip                String?     @db.VarChar(45)
+  userAgent         String?     @map("user_agent") @db.VarChar(300)
+  expiresAt         DateTime    @map("expires_at") @db.Timestamptz(3)
+  absoluteExpiresAt DateTime    @map("absolute_expires_at") @db.Timestamptz(3)
+  revokedAt         DateTime?   @map("revoked_at") @db.Timestamptz(3)
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt        DateTime    @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+  leases            EditLease[]
 
   @@index([userId])
   @@map("identity_sessions")
@@ -253,6 +304,83 @@ model BlockedRequest {
 
   @@index([createdAt(sort: Desc)])
   @@map("network_blocked_requests")
+}
+
+// Owner: identity. Groups of people to share with (Phase 2). Names unique case-insensitively
+// (unique index on lower(name) in the migration).
+model Group {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  name        String        @db.VarChar(80)
+  createdById String        @map("created_by_id") @db.Uuid
+  createdBy   User          @relation("GroupCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  members     GroupMember[]
+  grants      ShareGrant[]
+
+  @@map("identity_groups")
+}
+
+model GroupMember {
+  groupId   String   @map("group_id") @db.Uuid
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation("GroupMember", fields: [userId], references: [id], onDelete: Cascade)
+  addedById String   @map("added_by_id") @db.Uuid
+  addedBy   User     @relation("GroupMemberAddedBy", fields: [addedById], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([groupId, userId])
+  @@index([userId])
+  @@map("identity_group_members")
+}
+
+// ---------------------------------------------------------------------------
+// sharing module (database_schema.md 3.14)
+// ---------------------------------------------------------------------------
+
+// The roles a grant or the company link can give. OWNER is never a grant.
+enum ShareRole {
+  EDITOR
+  COMMENTER
+  VIEWER
+
+  @@map("share_role")
+}
+
+// Owner: sharing. Exactly one of userId and groupId (check constraint in the migration).
+model ShareGrant {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  workbookId  String    @map("workbook_id") @db.Uuid
+  workbook    Workbook  @relation(fields: [workbookId], references: [id], onDelete: Restrict)
+  userId      String?   @map("user_id") @db.Uuid
+  user        User?     @relation("GrantUser", fields: [userId], references: [id], onDelete: Restrict)
+  groupId     String?   @map("group_id") @db.Uuid
+  group       Group?    @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  role        ShareRole
+  createdById String    @map("created_by_id") @db.Uuid
+  createdBy   User      @relation("GrantCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([workbookId, userId])
+  @@unique([workbookId, groupId])
+  @@index([userId])
+  @@index([groupId])
+  @@map("sharing_grants")
+}
+
+// Owner: sharing. First time a person opened a workbook through the company link (Decision 52).
+model LinkOpen {
+  workbookId    String   @map("workbook_id") @db.Uuid
+  workbook      Workbook @relation(fields: [workbookId], references: [id], onDelete: Restrict)
+  userId        String   @map("user_id") @db.Uuid
+  user          User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  firstOpenedAt DateTime @map("first_opened_at") @db.Timestamptz(3)
+
+  @@id([workbookId, userId])
+  @@index([userId])
+  @@map("sharing_link_opens")
 }
 
 // ---------------------------------------------------------------------------

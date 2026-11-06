@@ -247,6 +247,7 @@ docker compose -f docker/docker-compose.local.yml exec db psql -U jdsheets -c '\
 - `npm run editor:build` copies it to `.build/gridcraft`, applies `patches/gridcraft/*.patch` in order, runs `trunk build --release` with `public_url = "/editor/"`, and writes `public/editor/` with `build-info.json`.
 - Run `editor:build` again after: cloning, pulling a submodule bump, or changing a patch.
 - Standalone look at plain GridCraft: `npm run editor:serve` → `http://127.0.0.1:47325`.
+- **Patch 0001 (access mode, Phase 2)** lives in `patches/gridcraft/0001-access-mode.patch`, with the upstream pull request text in `0001-access-mode.upstream.md`. To change it: unpack the pinned source into a scratch folder (`git -C vendor/gridcraft archive HEAD | tar -x -C <folder>`), `git init` and commit there, apply the patch, edit, and write the patch again with `git diff`. Its tests run natively in that folder: `cargo test -p gridcraft-web access` (with the pinned toolchain). `npm run test:unit` checks every patch applies and names its upstream pull request (P2-MODE-01).
 
 Update the submodule after pulling:
 

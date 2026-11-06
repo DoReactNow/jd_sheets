@@ -211,10 +211,10 @@ jd-sheets/
 | `gridcraft:save { name, bytes }` | editor → page | User saved (Ctrl/Cmd+S, File › Save); page `PUT`s `.xlsx` with `If-Match`; other files (PDF export) are downloaded | 0 |
 | `gridcraft:dirty { dirty }` | editor → page | Unsaved state changed; page shows it | 0 |
 | URL `?host=parent&chrome=notitlebar&author=…` | page → editor | On load: host mode, GridCraft's title bar hidden, comment author (Decision 43) | 0 |
-| `gridcraft:saveNow` | page → editor | Ask the editor to save, for autosave (patch 0001, Decision 43) | 2 |
+| `gridcraft:saveNow` | page → editor | Ask the editor to save, for autosave (patch 0001, Decisions 43, 54); ignored in view mode | 2 |
 | `gridcraft:failed { error }` | editor → page | Editor could not start; page shows a friendly message | 0 |
 | URL `?mode=view\|comment\|edit` | page → editor | On load (patch 0001) | 2 |
-| `gridcraft:mode { mode }` | page → editor | Role or lease changed while open (patch 0001) | 2 |
+| `gridcraft:mode { mode }` | page → editor | Role or lease changed while open (patch 0001); changes the mode does not allow are put back after each frame (Decision 54) | 2 |
 | `gridcraft:command { seq, id, params }` | editor → page | Every engine command run locally (patch 0002) | 3 |
 | `gridcraft:apply { seq, id, params }` | page → editor | A command from another person (patch 0002) | 3 |
 | `gridcraft:resync { bytes, seq }` | page → editor | Reload after a rejected command (patch 0002) | 3 |

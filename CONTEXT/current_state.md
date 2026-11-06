@@ -19,7 +19,7 @@ The source of truth for what is done and what is next. **Check this file first i
 |:---|:---|:---|:---|
 | 0 | Foundation and walking skeleton | GridCraft running locally on day one; by the end, our app: file list, new workbook, edit, save, reopen | **DONE** (pull request #1 merged 2026-11-06) |
 | 1 | Identity, access and the IP wall | Sign-in, sign-up with OTP, approval queue, admin user screens, network rules, blocked page, audit trail | **DONE** (2026-11-06, built and tested locally; pull request open) |
-| 2 | Workbooks complete and sharing | Share dialog with four roles, view and comment modes, edit lease, version history and restore, autosave, import/export, trash, groups | **PLANNED** (work items written 2026-11-06; waiting for approval) |
+| 2 | Workbooks complete and sharing | Share dialog with four roles, view and comment modes, edit lease, version history and restore, autosave, import/export, trash, groups | **DONE** (2026-11-06, built and tested locally; pull request open) |
 | 3 | Live collaboration | Two people editing the same workbook at once, presence and selections, live comments | PENDING |
 | 4 | Hardening and go-live | Load-tested, backed up, deployed on the Hostinger VPS behind the real domain | PENDING |
 
@@ -365,7 +365,7 @@ Detailed work items are written when each phase starts (Decision 36).
 - [x] Docs updated (Decisions 46–50, local_setup, database_schema)
 - Moved, at the owner's request to save the Mac's resources (2026-11-06): the local fresh-clone drill (CI builds from a fresh clone on every push) and the Docker check with a closed edge allowlist (`P1-NET-16`) move to Phase 4, where the Docker images are built for go-live.
 
-### Phase 2: Workbooks complete and sharing — PLANNED (waiting for the owner's approval)
+### Phase 2: Workbooks complete and sharing — DONE (pull request open)
 
 **Goal:** People share workbooks with the right role and work safely one editor at a time.
 
@@ -375,72 +375,74 @@ Detailed work items are written when each phase starts (Decision 36).
 
 **Execution order:** `W-201 → W-202 → W-203 → W-204 → W-205 → W-206 → W-207 → W-208 → W-209 → W-210 → W-211 → W-212 → W-213 → W-214 → W-215`.
 
-**Scenario coverage:** every Phase 2 scenario maps to the item named below. Moved: none.
+**Scenario coverage:** every Phase 2 scenario maps to the item named below. Moved: none. Partly met: P2-MODE-02's "ribbon shows editing commands disabled" (Decision 54); typing, paste, menus, shortcuts, undo and Save are all stopped.
+
+**Approved and built 2026-11-06** (owner: "Approve, build it"). Details settled while building: Decision 54.
 
 **How patch 0001 works (investigated at v0.16.1):** every command GridCraft's UI runs goes through the public `SheetApp::run` (`crates/ui-egui/src/app/commands.rs`), and the engine marks each command `undoable`/`journal` or a query. The patch adds an access mode to `SheetApp` (`Edit`, `Comment`, `View`), refuses in `run` any changing command the mode does not allow (comment mode allows only the comment and note commands of `review.*`), keeps the in-cell editor from opening, and greys out the ribbon through the existing "enabled" check. `apps/gridcraft-web/src/host.rs` reads `?mode=` and handles `gridcraft:mode` and `gridcraft:saveNow`. If a change outside `apps/gridcraft-web` and the UI crate's public entry points turns out unavoidable, I stop and ask first (Decision 8). The browser mode is only for comfort: the server is the lock (W-206).
 
 #### W-201: Sharing, groups, lease, recent and trash tables
-- [ ] Models of `database_schema.md` 3.2 (link role, download setting, trash columns, trigram title index), 3.4, 3.5, 3.11, 3.14; check constraints: a grant names exactly one of user or group, a grant is never `OWNER`, group names unique case-insensitively
-- [ ] RED integration tests for every constraint, then the migration (expand only)
+- [x] Models of `database_schema.md` 3.2 (link role, download setting, trash columns, trigram title index), 3.4, 3.5, 3.11, 3.14; check constraints: a grant names exactly one of user or group, a grant is never `OWNER`, group names unique case-insensitively
+- [x] RED integration tests for every constraint, then the migration (expand only)
 
 #### W-202: Groups
-- [ ] RED tests: `P2-GROUP-01..05` (delete with shares follows Decision 52: `GROUP_IN_USE` without confirmation, then group and shares removed together, audited)
-- [ ] `identity` groups service; routes under `/api/admin/groups` (`groups:manage`); `groups:manage` added to `db:sync-rbac`
+- [x] RED tests: `P2-GROUP-01..05` (delete with shares follows Decision 52: `GROUP_IN_USE` without confirmation, then group and shares removed together, audited)
+- [x] `identity` groups service; routes under `/api/admin/groups` (`groups:manage`); `groups:manage` added to `db:sync-rbac`
 
 #### W-203: The `sharing` module and the role resolver
-- [ ] RED tests: `P2-SHARE-01..08`, `P2-SHARE-11`, `P2-SHARE-12`, `P2-LINK-01`, `P2-LINK-02`, `P2-LINK-04`, `P2-ROLE-01` (a matrix test calling every workbook route as each role and as a stranger)
-- [ ] Grants for users and groups, the company link, the download setting; the resolver (owner, direct, group, link: highest wins; deactivated members get nothing) replaces the Phase 0 resolver; link visits recorded; every change audited
-- [ ] Routes: `GET/PUT/DELETE /api/workbooks/:id/shares…`, `PUT /api/workbooks/:id/link`, `GET /api/share-targets?q=` (active users and groups only)
+- [x] RED tests: `P2-SHARE-01..08`, `P2-SHARE-11`, `P2-SHARE-12`, `P2-LINK-01`, `P2-LINK-02`, `P2-LINK-04`, `P2-ROLE-01` (a matrix test calling every workbook route as each role and as a stranger)
+- [x] Grants for users and groups, the company link, the download setting; the resolver (owner, direct, group, link: highest wins; deactivated members get nothing) replaces the Phase 0 resolver; link visits recorded; every change audited
+- [x] Routes: `GET/PUT/DELETE /api/workbooks/:id/shares…`, `PUT /api/workbooks/:id/link`, `GET /api/share-targets?q=` (active users and groups only)
 
 #### W-204: Lists, search and Recent
-- [ ] RED tests: `P2-SHARE-09`, `P2-SHARE-10`, `P2-LINK-03` (Decision 52), `P2-LIST-01..03`
-- [ ] `GET /api/workbooks?scope=mine|shared|recent&q=&sort=` with keyset paging; recent opens recorded on open (newest 50 kept, 20 shown)
+- [x] RED tests: `P2-SHARE-09`, `P2-SHARE-10`, `P2-LINK-03` (Decision 52), `P2-LIST-01..03`
+- [x] `GET /api/workbooks?scope=mine|shared|recent&q=&sort=` with keyset paging; recent opens recorded on open (newest 50 kept, 20 shown)
 
 #### W-205: GridCraft patch 0001 (access mode and save now)
-- [ ] RED tests (Rust, headless `SheetApp` against the patched copy, the way GridCraft's own control tests run): `P2-MODE-02`, `P2-MODE-04`, `P2-MODE-06`, `P2-MODE-07`; patch check `P2-MODE-01` (applies to the pinned tag; header names the upstream pull request or `pending` with its text file, Decision 53)
-- [ ] `patches/gridcraft/0001-access-mode.patch`, `0001-access-mode.upstream.md` (pull request text for the owner); bridge: `?mode=`, `gridcraft:mode`, `gridcraft:saveNow`, with `contracts/bridge/messages.json` examples and bridge unit tests (`P2-MODE-05`)
+- [x] RED tests (Rust, headless `SheetApp` against the patched copy, the way GridCraft's own control tests run): `P2-MODE-02`, `P2-MODE-04`, `P2-MODE-06`, `P2-MODE-07`; patch check `P2-MODE-01` (applies to the pinned tag; header names the upstream pull request or `pending` with its text file, Decision 53)
+- [x] `patches/gridcraft/0001-access-mode.patch`, `0001-access-mode.upstream.md` (pull request text for the owner); bridge: `?mode=`, `gridcraft:mode`, `gridcraft:saveNow`, with `contracts/bridge/messages.json` examples and bridge unit tests (`P2-MODE-05`)
 
 #### W-206: Role-aware saving (the server lock)
-- [ ] RED tests: `P2-ROLE-02..05`, `P2-MODE-03`; Rust tests for `diff-kind` (cells, formats, sheets, names, comments; another person's comment changed or deleted)
-- [ ] Rust `POST /internal/workbooks/diff-kind` (base and new bytes, the Commenter's name → `NONE`, `COMMENTS_ONLY`, `OTHER`, `FOREIGN_COMMENT`); the save route refuses Viewers, sends Commenters' saves through the check, needs the lease for Editors and Owners (W-207)
+- [x] RED tests: `P2-ROLE-02..05`, `P2-MODE-03`; Rust tests for `diff-kind` (cells, formats, sheets, names, comments; another person's comment changed or deleted)
+- [x] Rust `POST /internal/workbooks/diff-kind` (base and new bytes, the Commenter's name → `NONE`, `COMMENTS_ONLY`, `OTHER`, `FOREIGN_COMMENT`); the save route refuses Viewers, sends Commenters' saves through the check, needs the lease for Editors and Owners (W-207)
 
 #### W-207: Edit lease
-- [ ] RED tests: `P2-LEASE-01..10` (concurrency test for `P2-LEASE-06`; clock advanced for 89 and 91 seconds; second tab and "Move editing here" per Decision 52)
-- [ ] `POST /api/workbooks/:id/lease` (take, renew, take over own), `DELETE` (release, also with `sendBeacon` on close); save without the lease → `WORKBOOK_LOCKED`; renewal re-checks the role
+- [x] RED tests: `P2-LEASE-01..10` (concurrency test for `P2-LEASE-06`; clock advanced for 89 and 91 seconds; second tab and "Move editing here" per Decision 52)
+- [x] `POST /api/workbooks/:id/lease` (take, renew, take over own), `DELETE` (release, also with `sendBeacon` on close); save without the lease → `WORKBOOK_LOCKED`; renewal re-checks the role
 
 #### W-208: Editor page: modes, banner, autosave, leaving safely
-- [ ] RED tests (unit-dom and bridge): `P2-MODE-08`, `P2-SAVE-01..04` (timings from the single source of truth, Decision 52)
-- [ ] Editor opens in the role's mode; banner "Asha is editing" with Refresh, or "You are editing this in another tab" with "Move editing here"; mode switches live on role or lease change; autosave through `gridcraft:saveNow`; friendly retry on failure; unsaved-changes prompt
+- [x] RED tests (unit-dom and bridge): `P2-MODE-08`, `P2-SAVE-01..04` (timings from the single source of truth, Decision 52)
+- [x] Editor opens in the role's mode; banner "Asha is editing" with Refresh, or "You are editing this in another tab" with "Move editing here"; mode switches live on role or lease change; autosave through `gridcraft:saveNow`; friendly retry on failure; unsaved-changes prompt
 
 #### W-209: Version history, named versions and restore
-- [ ] RED tests: `P2-VER-01..05`, `P2-ROLE-07`, `P2-ROLE-08`
-- [ ] Routes: list versions, name a version, read an old version's content, restore (new version, audited; refused while someone else holds the lease); rename a workbook (Owner, Editor)
+- [x] RED tests: `P2-VER-01..05`, `P2-ROLE-07`, `P2-ROLE-08`
+- [x] Routes: list versions, name a version, read an old version's content, restore (new version, audited; refused while someone else holds the lease); rename a workbook (Owner, Editor)
 
 #### W-210: Import, export and the download setting
-- [ ] RED tests: `P2-IMPORT-01..05`, `P2-EXPORT-01..03`, `P2-ROLE-06`; Rust tests for conversion with golden files
-- [ ] Rust `POST /internal/workbooks/convert` (`.xlsx`, `.xlsb`, `.ods`, `.csv`, `.tsv` → `.xlsx`, through GridCraft's readers); `POST /api/workbooks/import`; download honours the setting; PDF export arrives as `gridcraft:save` with a `.pdf` name and is downloaded by the page
+- [x] RED tests: `P2-IMPORT-01..05`, `P2-EXPORT-01..03`, `P2-ROLE-06`; Rust tests for conversion with golden files
+- [x] Rust `POST /internal/workbooks/convert` (`.xlsx`, `.xlsb`, `.ods`, `.csv`, `.tsv` → `.xlsx`, through GridCraft's readers); `POST /api/workbooks/import`; download honours the setting; PDF export arrives as `gridcraft:save` with a `.pdf` name and is downloaded by the page
 
 #### W-211: Trash and owner actions
-- [ ] RED tests: `P2-TRASH-01`, `P2-TRASH-02`, `P2-TRASH-04`, `P2-ROLE-09`
-- [ ] Move to Trash, restore within 30 days with shares intact, delete forever (Owner only); trashed workbooks are `NOT_FOUND` for everyone else
+- [x] RED tests: `P2-TRASH-01`, `P2-TRASH-02`, `P2-TRASH-04`, `P2-ROLE-09`
+- [x] Move to Trash, restore within 30 days with shares intact, delete forever (Owner only); trashed workbooks are `NOT_FOUND` for everyone else
 
 #### W-212: Administrator workbook tools
-- [ ] RED tests: `P2-ADMINWB-01..05` (old owner kept as Editor, Decision 52)
-- [ ] `GET /api/admin/workbooks` (metadata only, deactivated owners filterable), transfer ownership, "open as administrator" with a reason (view mode, audited every time)
+- [x] RED tests: `P2-ADMINWB-01..05` (old owner kept as Editor, Decision 52)
+- [x] `GET /api/admin/workbooks` (metadata only, deactivated owners filterable), transfer ownership, "open as administrator" with a reason (view mode, audited every time)
 
 #### W-213: Jobs: version pruning and trash purge
-- [ ] RED tests: `P2-VER-06`, `P2-VER-07`, `P2-TRASH-03` (clock advanced; run twice = one effect, X-JOB-*)
-- [ ] `workbooks.pruneVersions` (nightly, run date), `workbooks.purgeTrash` (nightly, workbook id): rows and files together; never a named or current version
+- [x] RED tests: `P2-VER-06`, `P2-VER-07`, `P2-TRASH-03` (clock advanced; run twice = one effect, X-JOB-*)
+- [x] `workbooks.pruneVersions` (nightly, run date), `workbooks.purgeTrash` (nightly, workbook id): rows and files together; never a named or current version
 
 #### W-214: Screens
-- [ ] Share dialog; home tabs My workbooks, Shared with me, Recent, Trash with search and sort; Import; version history panel; admin Groups and Workbooks pages; editor banners
-- [ ] Manual check at 1440 and 390 px
+- [x] Share dialog; home tabs My workbooks, Shared with me, Recent, Trash with search and sort; Import; version history panel; admin Groups and Workbooks pages; editor banners
+- [x] Manual check at 1440 and 390 px
 
 #### W-215: Seeds, journeys and acceptance
-- [ ] Seeds: shared workbooks, a group and a company link in `seed-test.ts` and `seed-dev.ts`
-- [ ] E2E: `P2-E2E-01` (journey 4), `P2-E2E-02` (journey 5), `P2-E2E-03` (lease handover)
-- [ ] Full local run once (lint, typecheck, unit, integration, Rust, contract, E2E); docs updated (`project_data.md`, `database_schema.md`, `local_setup.md`, decision log)
-- [ ] Editor and Rust builds run only in W-205, W-206 and W-210 and at the final run (Decision 51)
+- [x] Seeds: shared workbooks, a group and a company link in `seed-test.ts` and `seed-dev.ts`
+- [x] E2E: `P2-E2E-01` (journey 4), `P2-E2E-02` (journey 5), `P2-E2E-03` (lease handover)
+- [x] Full local run once (lint, typecheck, unit, integration, Rust, contract, E2E); docs updated (`project_data.md`, `database_schema.md`, `local_setup.md`, decision log)
+- [x] Editor and Rust builds run only in W-205, W-206 and W-210 and at the final run (Decision 51)
 
 ### Phase 3: Live collaboration — PENDING
 

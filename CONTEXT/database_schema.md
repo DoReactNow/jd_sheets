@@ -69,7 +69,7 @@ Placeholder that proves the migration chain in Phase 0; later holds editable set
 | `ownerId` | uuid, FK → `identity_users` (Restrict) | **Phase 0:** nullable, with no FK (no users yet; the development principal owns all). **Phase 1 migration:** backfill to the first Super Admin, then make it required and add the FK (expand/contract). |
 | `currentVersionId` | uuid, FK → `workbooks_versions` (Restrict), nullable only during creation | |
 | `sizeBytes` | bigint | size of the current version |
-| `linkRole` | enum `WorkbookRole` nullable | company link role (Phase 2); null = off |
+| `linkRole` | enum `ShareRole` nullable | company link role (Phase 2); null = off |
 | `allowDownloadForReaders` | boolean, default true | Viewers and Commenters may download (Phase 2) |
 | `trashedAt` | timestamptz nullable | Phase 2 |
 | `trashedById` | uuid nullable, FK → `identity_users` (Restrict) | Phase 2 |
@@ -266,10 +266,10 @@ A trigger refuses `UPDATE` and `DELETE`. Index (`createdAt` desc), (`actorId`, `
 | `sharing_grants` | Type | Notes |
 |:---|:---|:---|
 | `id` | uuid v7, PK | |
-| `workbookId` | uuid, FK → `workbooks_workbooks` (Restrict; trash purge removes grants first through `sharing`'s API) | |
+| `workbookId` | uuid, FK → `workbooks_workbooks` (Cascade, Decision 54) | |
 | `userId` | uuid nullable, FK → `identity_users` (Restrict) | exactly one of `userId`, `groupId` (check constraint) |
 | `groupId` | uuid nullable, FK → `identity_groups` (Restrict) | |
-| `role` | enum `WorkbookRole`: `EDITOR`, `COMMENTER`, `VIEWER` | `OWNER` is not a grant |
+| `role` | enum `ShareRole`: `EDITOR`, `COMMENTER`, `VIEWER` | `OWNER` is not a grant (Decision 54) |
 | `createdById` | uuid, FK → `identity_users` (Restrict) | |
 | `createdAt`, `updatedAt` | timestamptz | |
 
@@ -277,7 +277,7 @@ Unique (`workbookId`, `userId`) and (`workbookId`, `groupId`).
 
 | `sharing_link_opens` | Type | Notes |
 |:---|:---|:---|
-| `workbookId` | uuid, FK (Restrict) | PK part |
+| `workbookId` | uuid, FK (Cascade) | PK part |
 | `userId` | uuid, FK (Restrict) | PK part |
 | `firstOpenedAt` | timestamptz | so link-only workbooks can appear in "Shared with me" after the first open |
 

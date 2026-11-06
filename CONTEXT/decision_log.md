@@ -790,3 +790,19 @@ Because office addresses change, a change can leave everyone outside the allowed
 #### Decision
 - Claude writes `patches/gridcraft/0001-access-mode.patch` and the upstream pull request text (`patches/gridcraft/0001-access-mode.upstream.md`). The owner opens the pull request on `storytold/gridcraft` (or tells Claude to open it from `DoReactNow`).
 - Until then the patch header reads `Upstream: pending (see 0001-access-mode.upstream.md)`; the patch check (P2-MODE-01) accepts `pending` only together with that file, and Phase 4 acceptance requires a real link.
+
+---
+
+### Decision 54: Phase 2 Details Settled While Building
+
+**Date:** 2026-11-06
+**Status:** Accepted
+
+#### Decision
+- **Patch 0001 works after each frame, inside `apps/gridcraft-web` only.** GridCraft's UI calls the engine directly in about 60 places, so there is no single command gate within the allowed patch area. The patch's `access` module compares the workbook after every frame with what the mode allows and puts back anything else (view: nothing may change; comment: only the user's own comments and notes, plus their replies to others' threads), with a short notice. What a person only looks at (active sheet, zoom, scroll, page view) is never put back. In view mode Save hands no workbook to the page. **Not done:** greying out the ribbon's editing commands (part of P2-MODE-02); that needs a hook in `gridcraft-ui-egui` (outside Decision 8's area) and is offered upstream as a follow-up. The patch's tests run natively (`cargo test -p gridcraft-web` on the patched copy).
+- **Commenter saves:** checked by the Rust service (`POST /internal/workbooks/diff-kind`), which rewrites both versions once through GridCraft and compares content without comments and view settings. The comment author is the display name the editor writes (`?author=`). A Commenter's save waits (`WORKBOOK_LOCKED`) while someone else holds the edit lease, so an editor's work is never overtaken.
+- **Shares and link visits cascade with their workbook** (amends database_schema.md 3.14 "Restrict"), so deleting a workbook for good needs no call from `workbooks` into `sharing` (no circular dependency). Grant roles use a `share_role` enum without `OWNER`.
+- **Deleting for good** works only from the Trash. **Any request through the company link** counts as opening it (Decision 52's "first open").
+- **Administrator open:** the audit event's id is the permission to read the content for 15 minutes, in view mode; each open writes a new event.
+- **Imports** are converted by the Rust service (`POST /internal/workbooks/convert`) with GridCraft's readers; the original name comes in the `x-file-name` header.
+- **Editor tab id** (`x-editor-tab`) identifies the page holding the lease; `EDITING_ELSEWHERE` is a new catalog code for "you are editing in another tab".

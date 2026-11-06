@@ -68,6 +68,17 @@ impl Gate {
         self.allowed.clear();
     }
 
+    /// Takes the workbook as it is now as allowed (changes from others, live).
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    pub fn accept(&mut self, app: &SheetApp) {
+        if let Some(doc) = app.session.active() {
+            match self.allowed.iter_mut().find(|(uid, _)| *uid == doc.uid) {
+                Some(entry) => entry.1 = doc.wb.clone(),
+                None => self.allowed.push((doc.uid, doc.wb.clone())),
+            }
+        }
+    }
+
     /// After a frame: puts back whatever the mode does not allow. True when something was.
     pub fn enforce(&mut self, app: &mut SheetApp) -> bool {
         // The ribbon greys out what the mode doesn't allow (Decision 55).
@@ -129,8 +140,7 @@ fn permitted(before: &Workbook, now: &Workbook, mode: Mode, author: &str) -> Wor
     out.active_sheet = now.active_sheet.clone();
     out.view = now.view;
     for ((sheet, was), is) in out.sheets.iter_mut().zip(&before.sheets).zip(&now.sheets) {
-        let same_view =
-            was.zoom == is.zoom && was.view_active == is.view_active && was.view_top_left == is.view_top_left && was.view == is.view;
+        let same_view = was.zoom == is.zoom && was.view_active == is.view_active && was.view_top_left == is.view_top_left && was.view == is.view;
         let comments = if mode == Mode::Comment { merged_comments(&was.comments, &is.comments, author) } else { None };
         if same_view && comments.is_none() {
             continue;

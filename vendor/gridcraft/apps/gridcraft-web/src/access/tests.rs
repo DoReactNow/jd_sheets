@@ -78,11 +78,9 @@ fn looking_around_is_never_put_back() {
     let _ = app.session.run("home.insertSheet", json!({}));
     let mut gate = Gate::new(Mode::View);
     gate.enforce(&mut app);
-    for (id, params) in [
-        ("sheet.activate", json!({ "sheet": 0 })),
-        ("selection.set", json!({ "range": "C7" })),
-        ("sheet.activate", json!({ "sheet": 1 })),
-    ] {
+    for (id, params) in
+        [("sheet.activate", json!({ "sheet": 0 })), ("selection.set", json!({ "range": "C7" })), ("sheet.activate", json!({ "sheet": 1 }))]
+    {
         assert!(!key(&mut app, &mut gate, id, params), "{id}");
     }
     assert_eq!(wb(&app).active_sheet(), 1);
@@ -122,11 +120,7 @@ fn comment_mode_keeps_own_comments_only() {
 fn edit_mode_is_gridcraft_as_it_is() {
     let mut app = app("Asha");
     let mut gate = Gate::new(Mode::Edit);
-    for (id, params) in [
-        ("cell.set", json!({ "cell": "A1", "input": "typed" })),
-        ("home.insertSheet", json!({})),
-        ("edit.undo", json!({})),
-    ] {
+    for (id, params) in [("cell.set", json!({ "cell": "A1", "input": "typed" })), ("home.insertSheet", json!({})), ("edit.undo", json!({}))] {
         assert!(!menu(&mut app, &mut gate, id, params), "{id}");
     }
     assert!(app.session.active().unwrap().is_dirty());

@@ -137,7 +137,11 @@ fn patch_of(before: &Workbook, after: &Workbook) -> Option<CellPatch> {
             .into_iter()
             .filter_map(|c| {
                 let (x, y) = (b.cells.get(c), a.cells.get(c));
-                let content = |cell: Option<&Cell>| cell.map(|k| (k.formula.as_ref().map(|f| f.text.clone()), if k.formula.is_some() { None } else { Some(k.value.clone()) }, k.style));
+                let content = |cell: Option<&Cell>| {
+                    cell.map(|k| {
+                        (k.formula.as_ref().map(|f| f.text.clone()), if k.formula.is_some() { None } else { Some(k.value.clone()) }, k.style)
+                    })
+                };
                 (content(x) != content(y)).then(|| (c, x.cloned(), y.cloned()))
             })
             .collect();
@@ -200,7 +204,17 @@ impl Session {
 
     /// Called by `execute` after a top-level command succeeded and changed the workbook.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn capture_live(&mut self, sheet: usize, sheet_name: String, selection: Selection, id: &str, params: Json, clipboard: Option<LiveClipboard>, before: &Workbook, after: &Workbook) {
+    pub(crate) fn capture_live(
+        &mut self,
+        sheet: usize,
+        sheet_name: String,
+        selection: Selection,
+        id: &str,
+        params: Json,
+        clipboard: Option<LiveClipboard>,
+        before: &Workbook,
+        after: &Workbook,
+    ) {
         if is_view_only(id) {
             return;
         }
@@ -236,7 +250,11 @@ impl Session {
                 .filter(|(c, b, a)| {
                     let expected = if redo { b } else { a };
                     let now = sheet.cells.get(*c);
-                    let text = |x: Option<&Cell>| x.map(|k| (k.formula.as_ref().map(|f| f.text.clone()), k.style, if k.formula.is_some() { None } else { Some(k.value.clone()) }));
+                    let text = |x: Option<&Cell>| {
+                        x.map(|k| {
+                            (k.formula.as_ref().map(|f| f.text.clone()), k.style, if k.formula.is_some() { None } else { Some(k.value.clone()) })
+                        })
+                    };
                     text(now) == text(expected.as_ref())
                 })
                 .map(|(c, b, a)| serde_json::json!([c.a1(), if redo { a } else { b }]))
@@ -252,6 +270,44 @@ impl Session {
             other.push(Some(patch));
         }
         ran
+    }
+
+    /// While live, undo and redo reverse only this person's own changes (Decision 56).
+    pub(crate) fn live_intercept(&mut self, id: &str) -> Option<Result<Json>> {
+        (self.live.is_some() && self.depth == 0 && matches!(id, "edit.undo" | "edit.redo")).then(|| self.live_undo(id == "edit.redo"))
+    }
+
+    /// Before a command runs: where it runs and, for a paste, the copied cells.
+    pub(crate) fn live_before(
+        &self,
+        id: &str,
+        place: Option<&(u64, usize, String, Selection)>,
+    ) -> Option<(usize, String, Selection, Option<LiveClipboard>)> {
+        let (_, sheet, name, selection) = place.filter(|_| self.live.is_some())?;
+        Some((*sheet, name.clone(), selection.clone(), self.live_clipboard_for(id)))
+    }
+
+    /// After a command: captures it when it changed the workbook. A toggle (Bold) is sent with
+    /// the state it set, so replaying it later sets that state.
+    pub(crate) fn live_after(
+        &mut self,
+        id: &str,
+        params: &Json,
+        result: &Result<Json>,
+        prepared: Option<(usize, String, Selection, Option<LiveClipboard>)>,
+        before: Option<Arc<Workbook>>,
+    ) {
+        let (Some((sheet, name, selection, clip)), Ok(r), Some(before)) = (prepared, result, before) else { return };
+        let Some(after) = self.active().map(|d| d.wb.clone()) else { return };
+        if Arc::ptr_eq(&before, &after) {
+            return;
+        }
+        let live_params = if params.is_object() {
+            crate::record::with_toggle_state(id, crate::cmd::journal_params(params), r)
+        } else {
+            crate::cmd::journal_params(params)
+        };
+        self.capture_live(sheet, name, selection, id, live_params, clip, &before, &after);
     }
 
     /// The clipboard a step would carry for command `id` (only for commands that paste).
@@ -309,6 +365,156 @@ pub fn apply_result(s: &mut Session, step: &LiveStep) -> Result<Json> {
         ApplyError::SheetGone => EngineError::Other("That sheet was deleted by someone else.".into()),
         ApplyError::Refused(why) => EngineError::Other(why),
     })
+}
+
+/// Puts the active document back to `wb` (a snapshot it had earlier), with its formula graph.
+pub fn restore(s: &mut Session, wb: Arc<Workbook>) -> Result<()> {
+    let d = s.doc_mut()?;
+    let mut calc = gridcraft_calc::Calc::new();
+    calc.rebuild(&wb);
+    d.wb = wb;
+    d.calc = calc;
+    d.revision = d.revision.wrapping_add(1);
+    Ok(())
+}
+
+/// Replaces the active document's workbook with `wb` (a resync from the server).
+pub fn replace(s: &mut Session, wb: Workbook) -> Result<()> {
+    let wb = Arc::new(wb);
+    restore(s, wb.clone())?;
+    let d = s.doc_mut()?;
+    d.saved = wb;
+    Ok(())
+}
+
+/// A message from the live server, as the editor receives it.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Incoming {
+    /// A step the server accepted, in its order. `clientCommandId` is set for this editor's own.
+    #[serde(rename_all = "camelCase")]
+    Applied { seq: u64, client_command_id: Option<String>, step: Box<LiveStep> },
+    /// The server refused this editor's step (a role, a deleted sheet): resync.
+    #[serde(rename_all = "camelCase")]
+    Rejected { client_command_id: String },
+}
+
+/// What the editor must do after a message.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Outcome {
+    Ok,
+    /// The editor and the server no longer agree: load the server's workbook.
+    NeedResync,
+}
+
+/// The editor's side of live co-editing. Its own steps show at once; until the server confirms
+/// them they are pending. When someone else's step arrives first, the editor goes back to the
+/// last confirmed workbook, applies theirs, then its own again, so every editor ends in the
+/// server's order.
+#[derive(Debug, Default)]
+pub struct Client {
+    pending: std::collections::VecDeque<(String, LiveStep)>,
+    /// The workbook as the server had it before the first pending step.
+    base: Option<Arc<Workbook>>,
+    /// The workbook at the end of the last frame.
+    last: Option<Arc<Workbook>>,
+    /// The last sequence number applied.
+    pub seq: u64,
+    prefix: String,
+    counter: u64,
+}
+
+impl Client {
+    /// `prefix` makes this editor's step ids unique (a random id per page).
+    pub fn new(prefix: &str, seq: u64) -> Client {
+        Client { prefix: prefix.to_string(), seq, ..Client::default() }
+    }
+
+    /// Steps this person made since the last call, with their ids, to send to the server.
+    pub fn outgoing(&mut self, s: &mut Session) -> Vec<(String, LiveStep)> {
+        let steps = s.take_live_steps();
+        if steps.is_empty() {
+            return Vec::new();
+        }
+        if self.pending.is_empty() {
+            self.base = self.last.clone().or_else(|| s.active().map(|d| d.wb.clone()));
+        }
+        steps
+            .into_iter()
+            .map(|step| {
+                self.counter += 1;
+                let id = format!("{}-{}", self.prefix, self.counter);
+                self.pending.push_back((id.clone(), step.clone()));
+                (id, step)
+            })
+            .collect()
+    }
+
+    /// Steps not confirmed yet (shown to the person already).
+    pub fn pending(&self) -> usize {
+        self.pending.len()
+    }
+
+    /// Handles one message from the server.
+    pub fn receive(&mut self, s: &mut Session, message: &Incoming) -> Outcome {
+        match message {
+            Incoming::Rejected { .. } => Outcome::NeedResync,
+            Incoming::Applied { seq, client_command_id, step } => {
+                if *seq <= self.seq {
+                    return Outcome::Ok; // already applied (a replay after reconnecting)
+                }
+                self.seq = *seq;
+                if let Some(id) = client_command_id
+                    && self.pending.front().is_some_and(|(p, _)| p == id)
+                {
+                    self.pending.pop_front();
+                    if self.pending.is_empty() {
+                        self.base = None;
+                    } else if let Some(base) = self.base.take() {
+                        // The confirmed workbook moves on by this step.
+                        let mut shadow = Session::new();
+                        shadow.add_document(crate::DocState::from_saved((*base).clone(), None, "Book".into(), Trust::Local));
+                        if apply(&mut shadow, step).is_err() {
+                            return Outcome::NeedResync;
+                        }
+                        self.base = shadow.active().map(|d| d.wb.clone());
+                    }
+                    return Outcome::Ok;
+                }
+                if client_command_id.is_some() {
+                    return Outcome::NeedResync; // our own, out of order: should not happen
+                }
+                if self.pending.is_empty() {
+                    return if apply(s, step).is_ok() { Outcome::Ok } else { Outcome::NeedResync };
+                }
+                // Someone else's step came first: back to the confirmed workbook, theirs, then ours.
+                let Some(base) = self.base.clone() else { return Outcome::NeedResync };
+                if restore(s, base).is_err() || apply(s, step).is_err() {
+                    return Outcome::NeedResync;
+                }
+                self.base = s.active().map(|d| d.wb.clone());
+                for (_, own) in self.pending.clone() {
+                    if apply(s, &own).is_err() {
+                        return Outcome::NeedResync;
+                    }
+                }
+                Outcome::Ok
+            }
+        }
+    }
+
+    /// After a resync: nothing pending, the server's sequence number.
+    pub fn resynced(&mut self, seq: u64) {
+        self.pending.clear();
+        self.base = None;
+        self.last = None;
+        self.seq = seq;
+    }
+
+    /// Call at the end of every frame.
+    pub fn end_frame(&mut self, s: &Session) {
+        self.last = s.active().map(|d| d.wb.clone());
+    }
 }
 
 /// `live.setCells {sheet, cells: [[a1, cell | null]]}`: puts cells back exactly as given (undo

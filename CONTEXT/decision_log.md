@@ -728,10 +728,10 @@ From a fresh clone of the pull-request branch: lint, typecheck, builds, 232 unit
 
 ---
 
-### Decision 49: Open: Super Admin Access From Outside the Allowed Networks
+### Decision 49: Super Admin Access From Outside the Allowed Networks (resolved by Decision 57)
 
 **Date:** 2026-11-06
-**Status:** Open (not blocking; decide before go-live)
+**Status:** Resolved by Decision 57 (option b)
 
 Because office addresses change, a change can leave everyone outside the allowed ranges until someone with server access runs the recovery command. Options: (a) keep it as is (server command only); (b) let **only Super Admins** sign in from anywhere, every such sign-in audited and shown on the Network page; (c) a one-time emergency code sent to the Super Admin's email. The current build is (a).
 
@@ -825,3 +825,33 @@ Because office addresses change, a change can leave everyone outside the allowed
 - **Ribbon greying (completes P2-MODE-02):** `SheetApp` has an `access` setting (`Edit`, `Comment`, `View`). In view mode the ribbon disables every tab except View; in comment mode it also leaves Review usable. The after-each-frame rule of Decision 54 still applies everywhere else (keyboard, formula bar, context menus).
 - **Phase 3:** the planned "patch 0002" (command messages) becomes direct changes, including to GridCraft's engine and UI where that is simpler.
 - **Scenarios retired:** P0-EDIT-01 and P0-EDIT-02 (patches apply, and a broken patch names itself) and P2-MODE-01 (each patch names its upstream pull request) no longer apply.
+
+---
+
+## J. Phase 3 decisions
+
+### Decision 56: Phase 3 Open Questions Answered (TQ-06 to TQ-09)
+
+**Date:** 2026-11-06
+**Status:** Accepted (owner: "go with your recommendation" on all four; about 25–30 staff, 15–20 people on one sheet at once, "like Google Sheets")
+
+#### Decision
+- **Undo (TQ-06, P3-PATCH-04):** each person undoes only their own changes, as in Google Sheets.
+- **Same cell at the same moment (TQ-07, P3-REBASE-02, -03):** the change the server receives last wins for everyone. When someone inserts or deletes rows, columns or sheets, other people's pending edits and formula references shift with them. An edit that can no longer apply (its sheet was deleted) is refused, and that person's editor resyncs with a friendly message.
+- **People per workbook (TQ-08, P3-PERF-03):** up to **25 editors at once** on one workbook (the owner expects 15–20), with any number of viewers. The next editor opens in view mode with a friendly message. Phase 4 load targets (TQ-10): about 30 staff, 20 people editing one workbook at once.
+- **Versions during live editing (TQ-09, P3-SNAP-01, -03):** a version is saved every **10 minutes** while people are editing, and when the **last person leaves**. It is labelled "Live editing" with the names of everyone who changed it. Between versions nothing is lost: every accepted change is stored in `collab_ops` at once (P3-RECOV-01). This replaces the "200 commands or 30 seconds" rule in test_scenarios.md.
+- **Performance target (P3-PERF-01):** a change reaches the others within 300 ms (95th percentile) on the office network with **20** editors.
+
+---
+
+### Decision 57: Super Admins Sign In From Any Network (resolves Decision 49)
+
+**Date:** 2026-11-06
+**Status:** Accepted (owner: "super admin can login from anywhere from any network, other than the super admin, everyone will have access on only allowed IP network")
+
+#### Decision
+- A signed-in **Super Admin** passes the network rules from any address. Everyone else, and anyone not yet signed in, still needs an allowed network.
+- The sign-in page stays reachable from any address, so a Super Admin can sign in (a normal user signing in from outside gets the blocked page after sign-in, and no session is kept). The sign-in rate limits and lockout apply as before.
+- Every sign-in and every request from outside the allowed networks by a Super Admin is audited (`network.outsideAccess`) and shown on the Network access page.
+- Caddy's edge allowlist (`EDGE_ALLOWED_CIDRS`, Decision 46) must therefore allow everything, and the app's network rules do the filtering (Phase 4 sets this up).
+- Built as the first work item of Phase 3 (W-301).

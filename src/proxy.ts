@@ -12,6 +12,8 @@ export function proxy(request: NextRequest) {
   });
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("Content-Security-Policy", policy);
+  // The page path, for the root layout's network check (only sign-in is open to every network).
+  requestHeaders.set("x-jd-path", request.nextUrl.pathname);
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", policy);
   return response;

@@ -20,7 +20,7 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
-  const allowed = await pageNetworkAllowed("page");
+  const allowed = await pageNetworkAllowed();
   return (
     <html lang="en">
       <body>{allowed ? children : <Blocked />}</body>

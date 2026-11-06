@@ -31,6 +31,8 @@ export function sessionExpiry(signedInAt: Date, activityAt: Date): Date {
 export interface RequestMeta {
   ip: string | null;
   userAgent: string | null;
+  /** The request came from outside the allowed networks (Decision 57). */
+  outsideNetwork?: boolean;
 }
 
 export function createAuthService({ clock = systemClock }: { clock?: Clock } = {}) {
@@ -89,6 +91,19 @@ export function createAuthService({ clock = systemClock }: { clock?: Clock } = {
       }
       if (user.status === "PENDING_APPROVAL") throw new AppError("ACCOUNT_PENDING");
       if (user.status === "REJECTED") throw new AppError("ACCOUNT_REJECTED");
+      // From outside the allowed networks only a Super Admin gets a session (Decision 57).
+      if (meta.outsideNetwork && !user.role?.bypassesAccess) {
+        await identityRepository.transaction((tx) =>
+          recordAudit(tx, {
+            action: "auth.sign_in_refused_network",
+            targetType: "user",
+            targetId: user.id,
+            actorId: null,
+            ip: meta.ip,
+          }),
+        );
+        throw new AppError("NETWORK_BLOCKED");
+      }
 
       const token = newSessionToken();
       await identityRepository.transaction(async (tx) => {
@@ -112,6 +127,16 @@ export function createAuthService({ clock = systemClock }: { clock?: Clock } = {
           actorId: user.id,
           ip: meta.ip,
         });
+        if (meta.outsideNetwork) {
+          await recordAudit(tx, {
+            action: "network.outsideAccess",
+            targetType: "user",
+            targetId: user.id,
+            actorId: user.id,
+            ip: meta.ip,
+            details: { kind: "sign-in" },
+          });
+        }
       });
       return { token, mustChangePassword: user.mustChangePassword };
     },

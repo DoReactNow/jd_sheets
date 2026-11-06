@@ -19,6 +19,7 @@ export const networkController = {
         rules: await networkService.list(),
         yourIp: requestIp(request.headers),
         blocked: await networkService.recentBlocked(),
+        outsideAccess: await networkService.recentOutsideAccess(),
       },
     };
   },

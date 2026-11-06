@@ -1,7 +1,7 @@
 // The app's IP allowlist (Decisions 18, 46). The rules are cached for a few seconds in each process
 // and the cache is cleared on every change. A change that would lock out the person making it,
 // or leave no enabled range, is refused.
-import { recordAudit } from "@/modules/audit";
+import { recentAuditEvents, recordAudit } from "@/modules/audit";
 import { APP_CONFIG } from "@/shared/config/appConfig";
 import { getEnv } from "@/shared/config/env";
 import { AppError } from "@/shared/errors/AppError";
@@ -60,6 +60,10 @@ export function setNetworkEnforcementForTests(value: boolean | null): void {
   if (getEnv().APP_ENV !== "test") throw new Error("only when APP_ENV=test");
   enforcementForTests = value;
 }
+
+/** How often one person's outside access from one address is audited (Decision 57). */
+const OUTSIDE_AUDIT_EVERY_MS = 10 * 60 * 1000;
+const outsideSeen = new Map<string, number>();
 
 export function createNetworkService({
   clock = systemClock,
@@ -165,6 +169,40 @@ export function createNetworkService({
 
     async list(): Promise<RuleDto[]> {
       return (await networkRepository.listRules()).map(toDto);
+    },
+
+    /**
+     * A Super Admin working from outside the allowed networks (Decision 57): audited at most once
+     * per person and address every 10 minutes, so the trail shows it without flooding.
+     */
+    async recordOutsideAccess(input: { userId: string; ip: string | null; path: string }) {
+      const key = `${input.userId}|${input.ip ?? "unknown"}`;
+      const now = clock.now().getTime();
+      const last = outsideSeen.get(key);
+      if (last !== undefined && now - last < OUTSIDE_AUDIT_EVERY_MS) return;
+      outsideSeen.set(key, now);
+      await networkRepository.transaction((tx) =>
+        recordAudit(tx, {
+          action: "network.outsideAccess",
+          targetType: "user",
+          targetId: input.userId,
+          actorId: input.userId,
+          ip: input.ip,
+          details: { kind: "request", path: input.path.slice(0, 200) },
+        }),
+      );
+    },
+
+    /** The newest outside-access events, for the Network page. */
+    async recentOutsideAccess(limit = 20) {
+      return (await recentAuditEvents("network.outsideAccess", limit)).map((row) => ({
+        id: row.id,
+        ip: row.ip,
+        who: row.actor?.displayName ?? "",
+        email: row.actor?.email ?? "",
+        kind: (row.details as { kind?: string }).kind ?? "request",
+        at: toIsoInstant(row.createdAt),
+      }));
     },
 
     async recentBlocked(limit = 50) {

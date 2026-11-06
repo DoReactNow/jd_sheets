@@ -6,12 +6,24 @@ import { can } from "@/shared/rbac/guard";
 import type { PermissionCode } from "@/shared/rbac/permissionRegistry";
 import type { Principal } from "@/shared/rbac/principal";
 import { resolvePrincipal } from "@/shared/rbac/principalResolver";
-import { checkNetwork } from "./networkGuard";
+import { checkNetwork, recordOutsideAccess } from "./networkGuard";
 
-/** True when this page request comes from an allowed network. */
-export async function pageNetworkAllowed(path: string): Promise<boolean> {
-  const decision = await checkNetwork({ headers: await headers(), method: "GET", path });
-  return decision.allowed;
+/** Pages anyone may open from any network: signing in (a Super Admin may work from anywhere). */
+const OPEN_TO_EVERY_NETWORK = new Set(["/sign-in"]);
+
+/**
+ * True when this page may be shown: an allowed network, the sign-in page, or a signed-in Super
+ * Admin from anywhere (Decision 57).
+ */
+export async function pageNetworkAllowed(): Promise<boolean> {
+  const all = await headers();
+  const path = all.get("x-jd-path") ?? "page";
+  const decision = await checkNetwork({ headers: all, method: "GET", path });
+  if (decision.allowed || OPEN_TO_EVERY_NETWORK.has(path)) return true;
+  const principal = await resolvePrincipal({ headers: all });
+  if (!principal?.bypassesAccess) return false;
+  await recordOutsideAccess({ userId: principal.userId, ip: decision.ip, path });
+  return true;
 }
 
 /** The signed-in person, or a redirect to sign-in (and to change-password when required). */

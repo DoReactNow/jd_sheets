@@ -696,7 +696,7 @@ From a fresh clone of the pull-request branch: lint, typecheck, builds, 232 unit
 - The **edge allowlist in Caddy is optional**: `EDGE_ALLOWED_CIDRS` may stay open (`0.0.0.0/0 ::/0`), so a changed office address never needs a server edit. (Amends Decision 18, layer 1.)
 - **Where the rules apply:** every page (checked when the page is rendered) and every API route (in `route()`), including sign-in and sign-up. Exempt: `/api/health` (container health checks) and the static editor files (they hold no data; every workbook byte goes through the API). A refused page shows "This isn't available from this network"; a refused API call answers `NETWORK_BLOCKED` (403).
 - **Self-lockout:** a change that would exclude the person's own current address is refused, the last enabled rule cannot be removed while enforcement is on, and every change is audited.
-- **When the office address changes and nobody inside can reach the page**, the recovery command on the server adds the new range: `npm run admin:reset-ip-rules -- --cidr <range>`. A "Super Admin may sign in from anywhere" exception is **not** built; it is an Open question for the owner (Decision 49).
+- **When the office address changes and nobody inside can reach the page**, the recovery command on the server adds the new range: `npm run admin:reset-ip-rules -- --cidr <range>`. A Super Admin may also sign in from anywhere and add the new range on the Network access page (Decision 57).
 
 ---
 
@@ -852,6 +852,6 @@ Because office addresses change, a change can leave everyone outside the allowed
 #### Decision
 - A signed-in **Super Admin** passes the network rules from any address. Everyone else, and anyone not yet signed in, still needs an allowed network.
 - The sign-in page stays reachable from any address, so a Super Admin can sign in (a normal user signing in from outside gets the blocked page after sign-in, and no session is kept). The sign-in rate limits and lockout apply as before.
-- Every sign-in and every request from outside the allowed networks by a Super Admin is audited (`network.outsideAccess`) and shown on the Network access page.
+- A Super Admin's sign-in from outside is always audited (`network.outsideAccess`); their requests from outside are audited at most once per person and address every 10 minutes. Both show on the Network access page. Someone else signing in from outside is audited as `auth.sign_in_refused_network`.
 - Caddy's edge allowlist (`EDGE_ALLOWED_CIDRS`, Decision 46) must therefore allow everything, and the app's network rules do the filtering (Phase 4 sets this up).
 - Built as the first work item of Phase 3 (W-301).

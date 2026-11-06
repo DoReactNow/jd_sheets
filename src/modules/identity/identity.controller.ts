@@ -47,10 +47,14 @@ export const identityController = {
   async signIn({
     input,
     request,
+    outsideNetwork,
   }: Ctx<z.output<typeof schemas.signInInput>>): Promise<
     HandlerResult<{ mustChangePassword: boolean }>
   > {
-    const { token, mustChangePassword } = await authService.signIn(input, meta(request));
+    const { token, mustChangePassword } = await authService.signIn(input, {
+      ...meta(request),
+      outsideNetwork,
+    });
     return { data: { mustChangePassword }, headers: { "set-cookie": sessionCookie(token) } };
   },
 

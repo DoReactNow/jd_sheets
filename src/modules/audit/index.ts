@@ -1,6 +1,7 @@
 // Public API of the audit module.
 export {
   findAuditEvent,
+  recentAuditEvents,
   recordAudit,
   safeDetails,
   type AuditInput,

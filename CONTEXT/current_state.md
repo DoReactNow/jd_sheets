@@ -522,7 +522,7 @@ Detailed work items are written when each phase starts (Decision 36).
 #### W-401: Server check and the proxy choice (owner, read-only)
 - [x] The owner pastes the read-only check (`runbook.md`, "Server check") and sends back the output (2026-11-06)
 - [x] Decide the proxy layout (Decision 62: behind the existing Traefik, no published ports); Gmail's port 465 reachable; memory tight (2.8 GB free, swap mostly used)
-- [ ] Settle SSH and the firewall with the owner (P4-SEC-04): effective `sshd -T` values, who else logs in, Hostinger firewall rules
+- [x] Settle SSH and the firewall with the owner (P4-SEC-04): only the owner logs in; password login is on today, turned off in W-410 (Decision 62)
 - [ ] Owner's answer on memory: if the load test shows the server is too small, bigger plan or separate VPS
 
 #### W-402: The real mailer (P4-MAIL-01..03)
@@ -566,8 +566,8 @@ Detailed work items are written when each phase starts (Decision 36).
 - [ ] Results in `hardening_results.md`; memory limits adjusted if needed
 
 #### W-410: Go-live setup on the server (owner, guided; P4-SEC-04, -05, P4-DEPLOY-03)
-- [ ] Hostinger snapshot first. Hostinger firewall: 80 and 443 open; 22 per W-401
-- [ ] GitHub token (read packages only) and `ops/setup.sh`; the owner types the app password, the Super Admin password and the backup passphrase
+- [ ] Hostinger snapshot first. SSH keys only (Decision 62, checked from a new terminal tab before closing the first); Hostinger firewall: 22, 80, 443 only
+- [ ] Registry access (the existing login, or a read-only GitHub token if it cannot pull) and `ops/setup.sh`; the owner types the app password, the Super Admin password and the backup passphrase
 - [ ] Traefik picks up `sheets.jdfusion.in` from the labels; HTTPS certificate issued, renewal automatic (P4-DEPLOY-03)
 - [ ] First `deploy.sh`; `db:sync-rbac`; private seed (`amit@jdfusion.in`, `103.144.119.117/32`); seed password removed from the env file
 - [ ] Google Drive authorisation for rclone (the owner approves in their own browser); first backup visible in Drive (P4-BACKUP-01); timers on

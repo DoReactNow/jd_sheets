@@ -1001,3 +1001,8 @@ Because office addresses change, a change can leave everyone outside the allowed
 - **Install folder:** `/opt/jdsheets`, like the other apps.
 - **Memory (*pending*):** the Decision 61 limits add up to 2.56 GB, almost all that is free. Plan: start with tighter limits (Postgres 384 MB, app 640 MB, worker 192 MB, Rust service 768 MB, about 2 GB at most; normal use well below), and let the load test (W-409) decide. If the server cannot carry 20 live editors without pushing the other apps into swap, the options are a bigger Hostinger plan or a separate small VPS for JD Sheets. That is the owner's call, after the numbers.
 - **Server-wide recommendations (*pending*, owner's call):** a Hostinger firewall allowing only 22, 80 and 443 (and 32768 only if the Hermes agent is used); SSH with keys only. Before changing SSH, check that the CRM and JD Connect developer does not log in with a password.
+
+#### Owner's answers (2026-11-06, same day)
+- **Only the owner logs in to the server.** The effective SSH settings (`sshd -T`) are `permitrootlogin yes` and `passwordauthentication yes`, so anyone on the internet can try root passwords. In W-410, with the owner: password login off and root by key only (`PasswordAuthentication no`, `PermitRootLogin prohibit-password`, in a drop-in file). Before closing the first terminal, check with `sshd -t` and a **new** browser-terminal tab; Hostinger's emergency console is the fallback. Then the Hostinger firewall: 22, 80 and 443 only.
+- **Outside watchdog:** later, not part of go-live.
+- A registry login already exists on the server (`/root/.docker/config.json`, 2026-10-29). W-410 first tries pulling a JD Sheets image with it; a new read-only GitHub token is needed only if that fails.

@@ -117,3 +117,23 @@ describe("sharing and group rules in the database", () => {
     expect(left.rowCount).toBe(0);
   });
 });
+
+describe("live changes in the database (Decision 58)", () => {
+  it("one change per sequence number, and one per client command id", async () => {
+    const version = await client.query<{ id: string }>(
+      `INSERT INTO workbooks_versions (id, workbook_id, number, storage_key, size_bytes, sha256, source)
+       VALUES (gen_random_uuid(), $1, 1, 'k-' || gen_random_uuid(), 1, repeat('a', 64), 'CREATE') RETURNING id`,
+      [workbookId],
+    );
+    const op = (seq: number, ccid: string) =>
+      client.query(
+        `INSERT INTO collab_ops (workbook_id, seq, base_version_id, user_id, client_command_id, command_id, step)
+         VALUES ($1, $2, $3, $4, $5, 'cell.set', '{}')`,
+        [workbookId, seq, version.rows[0]!.id, owner.id, ccid],
+      );
+    await op(1, "a");
+    await expect(op(1, "b")).rejects.toThrow(/duplicate|unique/i);
+    await expect(op(2, "a")).rejects.toThrow(/duplicate|unique/i);
+    await expect(op(2, "b")).resolves.toBeTruthy();
+  });
+});

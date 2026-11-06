@@ -8,6 +8,9 @@ import { roleAllows, type WorkbookRole } from "@/shared/rbac/workbookAccess";
 import { plusDuration, systemClock, toIsoInstant, type Clock } from "@/shared/time";
 import { leaseRepository } from "./workbooks.repository";
 
+/** Shown as the holder while people edit live. */
+export const LIVE_HOLDER = "People editing live";
+
 export type LeaseState =
   | { status: "HELD"; expiresAt: string; renewSeconds: number }
   | { status: "OTHER"; holderName: string }
@@ -39,6 +42,10 @@ export function createLeaseService({ clock = systemClock }: { clock?: Clock } = 
         return { status: "VIEW_ONLY" };
       }
       if (!principal.sessionId) throw new AppError("UNAUTHENTICATED");
+      // Live editing and the one-editor lease never both allow editing (P3-FALLBACK-02).
+      if (await leaseRepository.liveNow(workbookId, clock.now())) {
+        return { status: "OTHER", holderName: LIVE_HOLDER };
+      }
       for (let attempt = 0; attempt < 2; attempt++) {
         const now = clock.now();
         const expiresAt = plusDuration(now, { seconds: APP_CONFIG.lease.ttlSeconds });
@@ -81,6 +88,20 @@ export function createLeaseService({ clock = systemClock }: { clock?: Clock } = 
       throw new AppError("WORKBOOK_LOCKED", {
         logContext: { workbookId, holder: current?.userId ?? null },
       });
+    },
+
+    /** Someone holds the lease now (live editing then opens view-only, P3-FALLBACK-02). */
+    async holder(workbookId: string): Promise<{ userId: string; holderName: string } | null> {
+      const current = await leaseRepository.current(workbookId, clock.now());
+      return current ? { userId: current.userId, holderName: current.holderName } : null;
+    },
+
+    /** The live service says people are editing live (renewed every 30 s) or stopped. */
+    async markLive(workbookId: string, editing: boolean): Promise<void> {
+      await leaseRepository.setLiveUntil(
+        workbookId,
+        editing ? plusDuration(clock.now(), { seconds: APP_CONFIG.lease.ttlSeconds }) : null,
+      );
     },
 
     /** Someone other than this person holds the lease (restore and Commenter saves wait). */

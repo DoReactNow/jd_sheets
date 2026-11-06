@@ -4,6 +4,7 @@
 import type { Readable } from "node:stream";
 import { recordAudit } from "@/modules/audit";
 import { APP_CONFIG } from "@/shared/config/appConfig";
+import { notifyAccessChanged } from "@/shared/collab/client";
 import { AppError } from "@/shared/errors/AppError";
 import { uuid7 } from "@/shared/ids/uuid7";
 import type { Principal } from "@/shared/rbac/principal";
@@ -36,7 +37,11 @@ export function createHistoryService({ repository, lease, storage, clock }: Hist
       const versions = await repository.listVersions(workbookId, before, PAGE + 1);
       const page = versions.slice(0, PAGE);
       const people = await repository.userNames([
-        ...new Set(page.map((v) => v.createdById).filter((id): id is string => id !== null)),
+        ...new Set(
+          page
+            .flatMap((v) => [v.createdById, ...v.contributorIds])
+            .filter((id): id is string => id !== null),
+        ),
       ]);
       const numbers = new Map(versions.map((v) => [v.id, v.number]));
       const items: VersionDto[] = page.map((v) => ({
@@ -47,6 +52,7 @@ export function createHistoryService({ repository, lease, storage, clock }: Hist
         createdBy: v.createdById
           ? { id: v.createdById, displayName: people.get(v.createdById) ?? "" }
           : null,
+        contributors: v.contributorIds.map((id) => ({ id, displayName: people.get(id) ?? "" })),
         createdAt: toIsoInstant(v.createdAt),
         sizeBytes: Number(v.sizeBytes),
         restoredFromNumber: v.restoredFromId ? (numbers.get(v.restoredFromId) ?? null) : null,
@@ -131,6 +137,8 @@ export function createHistoryService({ repository, lease, storage, clock }: Hist
               details: { fromVersion: version.number, newVersion: newNumber },
             }),
         );
+        // Everyone editing live loads the restored version (P3-RESTORE-01).
+        notifyAccessChanged({ workbookId, reload: true });
         return {
           versionId: newId,
           number,

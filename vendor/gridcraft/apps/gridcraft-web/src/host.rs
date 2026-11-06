@@ -13,6 +13,15 @@
 //!   (`?mode=` sets it on load; see the `access` module). In view mode Save hands nothing over.
 //! - `gridcraft:saveNow` (from the parent): save as File › Save would, for a parent that saves
 //!   by itself (autosave). Ignored in view mode.
+//! - Live co-editing (JD Sheets, Decisions 22, 56): `gridcraft:live { seq }` (from the parent)
+//!   starts it after the workbook is open; then every change this person makes goes to the parent
+//!   as `gridcraft:command { clientCommandId, step }` (the step as JSON text), and the parent sends
+//!   what the server ordered as `gridcraft:apply { message }` (JSON text of
+//!   `gridcraft_engine::live::Incoming`). `gridcraft:resync { name, bytes, seq }` replaces the
+//!   workbook with the server's; `gridcraft:resyncNeeded` (to the parent) asks for one.
+//!   `gridcraft:selection { sheetName, range }` (to the parent) says where this person is, and
+//!   `gridcraft:presence { people }` (from the parent, JSON text of `[{name, colour, sheetName,
+//!   range}]`) shows where the others are.
 //!
 //! Only the parent window on the page's own origin is heard or answered. In host mode the page
 //! starts with an empty workbook instead of a sample, and the parent guards leaving the page.
@@ -22,7 +31,17 @@ use std::rc::Rc;
 
 use gridcraft_ui_egui::{Inbox, Services, SheetApp};
 
+use gridcraft_engine::live::{self, Client, Incoming, Outcome};
+
 use crate::access::{Gate, Mode};
+
+/// Live co-editing messages from the parent, handled after the next frame.
+enum LiveMessage {
+    Presence(Vec<gridcraft_ui_egui::RemoteSelection>),
+    Start { seq: u64 },
+    Message(Incoming),
+    Resync { name: String, bytes: Vec<u8>, seq: u64 },
+}
 use wasm_bindgen::JsCast as _;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::closure::Closure;
@@ -49,6 +68,11 @@ pub struct Bridge {
     next_mode: Rc<Cell<Option<Mode>>>,
     /// The parent asked for a save.
     save_now: Rc<Cell<bool>>,
+    /// Live co-editing: messages waiting, and the editor's side once started.
+    live_inbox: Rc<RefCell<Vec<LiveMessage>>>,
+    live: Rc<RefCell<Option<Client>>>,
+    /// The selection last reported to the parent (presence).
+    reported_selection: Rc<RefCell<Option<(String, String)>>>,
 }
 
 impl Bridge {
@@ -77,6 +101,9 @@ impl Bridge {
             gate: Rc::new(RefCell::new(Gate::new(mode))),
             next_mode: Rc::default(),
             save_now: Rc::default(),
+            live_inbox: Rc::default(),
+            live: Rc::default(),
+            reported_selection: Rc::default(),
         })
     }
 
@@ -114,7 +141,8 @@ impl Bridge {
         if let Some(mode) = self.next_mode.take() {
             self.gate.borrow_mut().set_mode(mode);
         }
-        self.gate.borrow_mut().enforce(app);
+        let reverted = self.gate.borrow_mut().enforce(app);
+        self.sync_live(app, reverted);
         if self.save_now.take() && self.gate.borrow().mode().saves() {
             app.open_dialog("saveAs", serde_json::json!({}));
         }
@@ -130,6 +158,74 @@ impl Bridge {
         let dirty = app.session.documents().iter().any(|d| d.is_dirty());
         if self.reported.get() != Some(dirty) && self.send(&[("type", "gridcraft:dirty".into()), ("dirty", dirty.into())]) {
             self.reported.set(Some(dirty));
+        }
+    }
+
+    /// Live co-editing after each frame: this person's changes go out, the server's come in.
+    fn sync_live(&self, app: &mut SheetApp, reverted: bool) {
+        let queued = std::mem::take(&mut *self.live_inbox.borrow_mut());
+        let mut incoming = Vec::new();
+        for message in queued {
+            match message {
+                LiveMessage::Start { seq } => {
+                    app.session.start_live();
+                    let prefix = format!("{:x}", (js_sys::Math::random() * 1e15) as u64);
+                    let mut client = Client::new(&prefix, seq);
+                    client.end_frame(&app.session);
+                    *self.live.borrow_mut() = Some(client);
+                }
+                LiveMessage::Resync { name, bytes, seq } => {
+                    if let Ok((wb, _)) = gridcraft_engine::io::open_bytes(&name, &bytes) {
+                        let _ = live::replace(&mut app.session, wb);
+                    }
+                    let _ = app.session.take_live_steps();
+                    if let Some(client) = self.live.borrow_mut().as_mut() {
+                        client.resynced(&app.session, seq);
+                    }
+                    incoming.clear();
+                }
+                LiveMessage::Message(m) => incoming.push(m),
+                LiveMessage::Presence(people) => app.remote_selections = people,
+            }
+        }
+        let mut live = self.live.borrow_mut();
+        let Some(client) = live.as_mut() else { return };
+        // A change the mode put back is never sent (view mode sends nothing).
+        if reverted || self.gate.borrow().mode() == Mode::View {
+            let _ = app.session.take_live_steps();
+        } else {
+            // The sequence number seen when these changes were made: the server shifts them
+            // through others' row and column edits made since.
+            let base_seq = client.seq as f64;
+            for (id, step) in client.outgoing(&mut app.session) {
+                if let Ok(text) = serde_json::to_string(&step) {
+                    self.send(&[
+                        ("type", "gridcraft:command".into()),
+                        ("clientCommandId", id.as_str().into()),
+                        ("baseSeq", base_seq.into()),
+                        ("step", text.as_str().into()),
+                    ]);
+                }
+            }
+        }
+        for message in &incoming {
+            if client.receive(&mut app.session, message) == Outcome::NeedResync {
+                self.send(&[("type", "gridcraft:resyncNeeded".into())]);
+                break;
+            }
+        }
+        // Others' changes are not this person's: the mode keeps them.
+        self.gate.borrow_mut().accept(app);
+        client.end_frame(&app.session);
+        // Where this person is, when it changed (presence).
+        if let Some(doc) = app.session.active() {
+            let sheet = doc.wb.active().map(|s| s.name.clone()).unwrap_or_default();
+            let range = doc.selection.current().a1();
+            let now = Some((sheet.clone(), range.clone()));
+            if *self.reported_selection.borrow() != now {
+                *self.reported_selection.borrow_mut() = now;
+                self.send(&[("type", "gridcraft:selection".into()), ("sheetName", sheet.as_str().into()), ("range", range.as_str().into())]);
+            }
         }
     }
 
@@ -154,6 +250,7 @@ impl Bridge {
         let origin = self.origin.clone();
         let next_mode = self.next_mode.clone();
         let save_now = self.save_now.clone();
+        let live_inbox = self.live_inbox.clone();
         let on_message = Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |event: web_sys::MessageEvent| {
             if event.origin() != origin || !event.source().is_some_and(|s| js_sys::Object::is(&s, &parent)) {
                 return;
@@ -171,6 +268,50 @@ impl Bridge {
                 Some("gridcraft:saveNow") => {
                     save_now.set(true);
                     ctx.request_repaint();
+                    return;
+                }
+                Some("gridcraft:live") => {
+                    let seq = number(&data, "seq").unwrap_or(0);
+                    live_inbox.borrow_mut().push(LiveMessage::Start { seq });
+                    ctx.request_repaint();
+                    return;
+                }
+                Some("gridcraft:apply") => {
+                    if let Some(m) = string(&data, "message").and_then(|t| serde_json::from_str::<Incoming>(&t).ok()) {
+                        live_inbox.borrow_mut().push(LiveMessage::Message(m));
+                        ctx.request_repaint();
+                    }
+                    return;
+                }
+                Some("gridcraft:presence") => {
+                    let people = string(&data, "people").and_then(|t| serde_json::from_str::<Vec<serde_json::Value>>(&t).ok()).unwrap_or_default();
+                    let selections = people
+                        .iter()
+                        .filter_map(|p| {
+                            let range = gridcraft_engine::core::RangeRef::parse(p["range"].as_str()?).or_else(|| {
+                                gridcraft_engine::core::CellRef::parse(p["range"].as_str()?).map(gridcraft_engine::core::RangeRef::cell)
+                            })?;
+                            let hex = p["colour"].as_str()?.trim_start_matches('#');
+                            let rgb = u32::from_str_radix(hex, 16).ok()?;
+                            Some(gridcraft_ui_egui::RemoteSelection {
+                                name: p["name"].as_str()?.chars().take(40).collect(),
+                                colour: egui::Color32::from_rgb((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8),
+                                sheet_name: p["sheetName"].as_str()?.to_string(),
+                                range,
+                            })
+                        })
+                        .collect();
+                    live_inbox.borrow_mut().push(LiveMessage::Presence(selections));
+                    ctx.request_repaint();
+                    return;
+                }
+                Some("gridcraft:resync") => {
+                    let name = string(&data, "name").unwrap_or_else(|| "Book.xlsx".to_string());
+                    if let Some(bytes) = bytes(&data) {
+                        let seq = number(&data, "seq").unwrap_or(0);
+                        live_inbox.borrow_mut().push(LiveMessage::Resync { name, bytes, seq });
+                        ctx.request_repaint();
+                    }
                     return;
                 }
                 _ => return,
@@ -202,6 +343,11 @@ fn message(fields: &[(&str, JsValue)]) -> Option<js_sys::Object> {
         js_sys::Reflect::set(&m, &JsValue::from_str(key), value).ok()?;
     }
     Some(m)
+}
+
+fn number(data: &JsValue, key: &str) -> Option<u64> {
+    let n = js_sys::Reflect::get(data, &JsValue::from_str(key)).ok()?.as_f64()?;
+    (n.is_finite() && n >= 0.0).then_some(n as u64)
 }
 
 fn string(data: &JsValue, key: &str) -> Option<String> {

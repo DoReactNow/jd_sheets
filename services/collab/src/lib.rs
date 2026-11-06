@@ -9,10 +9,13 @@
     clippy::unimplemented
 )]
 
+pub mod app_client;
 pub mod clock;
 pub mod config;
 pub mod engine;
 pub mod error;
 pub mod http;
 pub mod ip;
+pub mod rooms;
 pub mod token;
+pub mod ws;

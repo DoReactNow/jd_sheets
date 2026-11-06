@@ -21,6 +21,9 @@ const HOME = "198.51.100.20";
 
 let superAdmin: TestUser;
 let sa: string;
+// The rules apply to everyone but Super Admins, who may work from anywhere (Decision 57).
+let member: TestUser;
+let me: string;
 
 beforeEach(async () => {
   await resetWithRoles();
@@ -30,6 +33,8 @@ beforeEach(async () => {
   service.invalidate();
   superAdmin = await createTestUser({ role: "SUPER_ADMIN" });
   sa = await signIn(superAdmin.email, TEST_PASSWORD, OFFICE);
+  member = await createTestUser({ role: "MEMBER" });
+  me = await signIn(member.email, TEST_PASSWORD, OFFICE);
 });
 afterEach(() => {
   setNetworkEnforcementForTests(null);
@@ -39,8 +44,8 @@ afterAll(() => getPrisma().$disconnect());
 
 describe("enforcement (P1-NET-01, -02, -06, -07, -13, X-ACCESS-11)", () => {
   it("serves an allowed address and refuses the rest before anything else, logging the refusal", async () => {
-    expect((await call(listWorkbooks, { cookie: sa, ip: OFFICE })).status).toBe(200);
-    const refused = await call(listWorkbooks, { cookie: sa, ip: HOME, path: "/api/workbooks" });
+    expect((await call(listWorkbooks, { cookie: me, ip: OFFICE })).status).toBe(200);
+    const refused = await call(listWorkbooks, { cookie: me, ip: HOME, path: "/api/workbooks" });
     expect(refused.status).toBe(403);
     expect(refused.body).toMatchObject({ error: { code: "NETWORK_BLOCKED" } });
     const logged = await getPrisma().blockedRequest.findFirstOrThrow({ where: { ip: HOME } });
@@ -48,34 +53,35 @@ describe("enforcement (P1-NET-01, -02, -06, -07, -13, X-ACCESS-11)", () => {
   });
 
   it("refuses a missing or malformed forwarded address rather than allowing it (P1-NET-06, -07)", async () => {
-    expect((await call(listWorkbooks, { cookie: sa })).status).toBe(403);
-    expect((await call(listWorkbooks, { cookie: sa, ip: "not-an-ip" })).status).toBe(403);
+    expect((await call(listWorkbooks, { cookie: me })).status).toBe(403);
+    expect((await call(listWorkbooks, { cookie: me, ip: "not-an-ip" })).status).toBe(403);
   });
 
   it("uses only the address the trusted proxy added (P1-NET-05)", async () => {
-    expect((await call(listWorkbooks, { cookie: sa, ip: `${OFFICE}, ${HOME}` })).status).toBe(403);
-    expect((await call(listWorkbooks, { cookie: sa, ip: `${HOME}, ${OFFICE}` })).status).toBe(200);
+    expect((await call(listWorkbooks, { cookie: me, ip: `${OFFICE}, ${HOME}` })).status).toBe(403);
+    expect((await call(listWorkbooks, { cookie: me, ip: `${HOME}, ${OFFICE}` })).status).toBe(200);
   });
 
   it("covers sign-in too, but never the health check (P1-NET-13)", async () => {
     const outside = await call(signInRoute, {
       method: "POST",
       ip: HOME,
-      body: { email: superAdmin.email, password: TEST_PASSWORD },
+      body: { email: member.email, password: TEST_PASSWORD },
     });
+    // Sign-in is open to every network, but only a Super Admin gets a session there (Decision 57).
     expect(outside.body).toMatchObject({ error: { code: "NETWORK_BLOCKED" } });
     expect((await call(healthRoute, { ip: HOME })).status).toBe(200);
   });
 
   it("applies a change on the next request (P1-NET-12)", async () => {
-    expect((await call(listWorkbooks, { cookie: sa, ip: HOME })).status).toBe(403);
+    expect((await call(listWorkbooks, { cookie: me, ip: HOME })).status).toBe(403);
     await call(createRoute, {
       method: "POST",
       cookie: sa,
       ip: OFFICE,
       body: { cidr: `${HOME}/32`, label: "Home office" },
     });
-    expect((await call(listWorkbooks, { cookie: sa, ip: HOME })).status).toBe(200);
+    expect((await call(listWorkbooks, { cookie: me, ip: HOME })).status).toBe(200);
   });
 });
 

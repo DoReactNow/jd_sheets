@@ -7,7 +7,8 @@ import { cellOf, readZipEntry } from "./support/xlsx";
 const SAVE = process.platform === "darwin" ? "Meta+s" : "Control+s";
 
 async function waitForEditor(page: Page) {
-  await expect(page.getByRole("status")).toHaveText("Saved", { timeout: 60_000 });
+  // The live service runs in the journeys: the editor is live (Phase 3).
+  await expect(page.getByTestId("live-status")).toHaveText("Live", { timeout: 60_000 });
   const frame = page.frameLocator('[data-testid="editor-frame"]');
   await expect(frame.locator("#gridcraft_canvas")).toBeVisible();
   // GridCraft hides its loading text once the first frame is drawn.
@@ -48,15 +49,11 @@ test("create, type values and a formula, save, reload", async ({ page }) => {
     await page.keyboard.type(input, { delay: 60 });
     await page.keyboard.press("Enter", { delay: 60 });
   }
-  // On a slow machine autosave (5 s after the last change) may already have saved; Ctrl/Cmd+S
-  // saves again either way.
-  const saved = page.waitForResponse(
-    (r) =>
-      r.url().includes(`/api/workbooks/${workbookId}/content`) && r.request().method() === "PUT",
-  );
+  // Ctrl/Cmd+S saves a version (live: the server saves it; otherwise the page does).
   await page.keyboard.press(SAVE);
-  expect((await saved).status()).toBe(200);
-  await expect(page.getByRole("status")).toHaveText("Saved");
+  await expect
+    .poll(async () => cellOf(await savedSheet(page, workbookId), "A3").value, { timeout: 20_000 })
+    .toBe("30");
 
   const xml = await savedSheet(page, workbookId);
   expect(cellOf(xml, "A1").value).toBe("10");

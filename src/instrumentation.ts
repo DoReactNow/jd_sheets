@@ -27,9 +27,12 @@ export async function register(): Promise<void> {
   configureWorkbookRoleResolver(resolveWorkbookRoleWithSharing);
 
   // The network rules for every page and API route (Decisions 18, 46).
-  const { configureNetworkGuard } = await import("@/shared/http/networkGuard");
+  const { configureNetworkGuard, configureOutsideAccessRecorder } =
+    await import("@/shared/http/networkGuard");
   const { networkService } = await import("@/modules/network");
   configureNetworkGuard((request) => networkService.check(request));
+  // Super Admins from outside the allowed networks are audited (Decision 57).
+  configureOutsideAccessRecorder((input) => networkService.recordOutsideAccess(input));
   const { logger } = await import("@/shared/logger");
   networkService
     .bootstrap()

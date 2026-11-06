@@ -1,7 +1,6 @@
 //! The service's HTTP surface (P0-RUST-01, P0-RUST-02, P0-ACC-04 for the service side,
 //! P0-VAL-02, P0-VAL-05).
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -25,9 +24,7 @@ fn app() -> axum::Router {
     .map(|(k, v)| (k.to_string(), v.to_string()))
     .collect();
     let config = Config::from_env(&vars).unwrap_or_else(|e| unreachable_config(&e.0));
-    router(AppState {
-        config: Arc::new(config),
-    })
+    router(AppState::new(config))
 }
 
 #[allow(clippy::panic)]

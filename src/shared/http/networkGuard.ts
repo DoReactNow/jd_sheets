@@ -16,6 +16,30 @@ export function configureNetworkGuard(guard: NetworkGuard | null): void {
   holder.jdsheetsNetworkGuard = guard ?? undefined;
 }
 
+/**
+ * Records that a Super Admin used the app from outside the allowed networks (Decision 57). The
+ * network module installs it; it decides how often to write the audit event.
+ */
+export type OutsideAccessRecorder = (input: {
+  userId: string;
+  ip: string | null;
+  path: string;
+}) => Promise<void>;
+
+const recorderHolder = globalThis as unknown as { jdsheetsOutsideAccess?: OutsideAccessRecorder };
+
+export function configureOutsideAccessRecorder(recorder: OutsideAccessRecorder | null): void {
+  recorderHolder.jdsheetsOutsideAccess = recorder ?? undefined;
+}
+
+export async function recordOutsideAccess(input: {
+  userId: string;
+  ip: string | null;
+  path: string;
+}): Promise<void> {
+  await recorderHolder.jdsheetsOutsideAccess?.(input);
+}
+
 /** No guard installed (unit tests, build) allows everything; the app always installs one. */
 export function checkNetwork(request: NetworkRequest): Promise<NetworkDecision> {
   return holder.jdsheetsNetworkGuard?.(request) ?? Promise.resolve({ allowed: true });

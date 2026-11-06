@@ -50,6 +50,8 @@ pub struct Config {
     pub collab_token_secret: String,
     pub internal_service_token: String,
     pub trusted_proxy_hops: usize,
+    /// Where the app's internal routes are (live editing, Decision 58): APP_INTERNAL_URL, else APP_URL.
+    pub app_url: String,
     pub limits: Limits,
 }
 
@@ -129,6 +131,12 @@ impl Config {
             )));
         }
 
+        let app_url = get("APP_INTERNAL_URL")
+            .or_else(|| get("APP_URL"))
+            .unwrap_or("http://127.0.0.1:47320")
+            .trim_end_matches('/')
+            .to_string();
+
         Ok(Config {
             app_env,
             host,
@@ -137,6 +145,7 @@ impl Config {
             collab_token_secret,
             internal_service_token,
             trusted_proxy_hops,
+            app_url,
             limits: Limits::default(),
         })
     }

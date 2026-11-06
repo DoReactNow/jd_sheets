@@ -3,6 +3,7 @@
 // is coordinated by the sharing module (Decision 52), which calls deleteInTx inside its own
 // transaction after removing the shares.
 import { recordAudit } from "@/modules/audit";
+import { notifyAccessChanged } from "@/shared/collab/client";
 import { AppError } from "@/shared/errors/AppError";
 import type { Principal } from "@/shared/rbac/principal";
 import { toIsoInstant } from "@/shared/time";
@@ -153,6 +154,7 @@ export const groupsService = {
         details: { userId },
       });
     });
+    notifyAccessChanged({ userId });
   },
 
   /** Deletes the group inside the caller's transaction (shares must already be gone). */

@@ -32,6 +32,7 @@ impl SheetApp {
             session,
             ui: UiState::default(),
             access: super::Access::default(),
+            remote_selections: Vec::new(),
             chrome: Chrome::default(),
             views: HashMap::new(),
             editor: None,

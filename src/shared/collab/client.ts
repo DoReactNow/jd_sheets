@@ -49,3 +49,21 @@ export async function pingCollab(timeoutMs = 2_000): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Tells the live service that who may do what changed (Phase 3, P3-WS-04, -05, P3-RESTORE-01):
+ * a share, a group member, a deactivation, the Trash, or a restored version (`reload`). It never
+ * fails the caller: a service that is down has no live connections to update.
+ */
+export function notifyAccessChanged(change: {
+  workbookId?: string;
+  userId?: string;
+  reload?: boolean;
+}): void {
+  void collabRequest("/internal/access-changed", {
+    method: "POST",
+    body: JSON.stringify(change),
+    contentType: "application/json",
+    timeoutMs: 3_000,
+  }).catch(() => undefined);
+}

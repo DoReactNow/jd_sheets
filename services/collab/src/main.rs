@@ -1,7 +1,6 @@
 //! Starts the collab service on COLLAB_HOST:COLLAB_PORT (default host 127.0.0.1).
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::Arc;
 
 use jd_collab::config::Config;
 use jd_collab::http::{AppState, router};
@@ -48,9 +47,8 @@ async fn main() {
         }
     };
     let address = SocketAddr::new(config.host, config.port);
-    let state = AppState {
-        config: Arc::new(config),
-    };
+    let state = AppState::new(config);
+    jd_collab::ws::start_background(&state);
     let listener = match tokio::net::TcpListener::bind(address).await {
         Ok(listener) => listener,
         Err(error) => {

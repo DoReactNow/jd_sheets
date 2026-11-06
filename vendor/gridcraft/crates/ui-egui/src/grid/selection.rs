@@ -92,6 +92,18 @@ pub(crate) struct SelectionPaintInput<'a> {
 
 pub(crate) fn paint_selection(input: SelectionPaintInput<'_>) {
     let SelectionPaintInput { painter: p, geo, sheet: sh, selection: sel, outline, tokens: t, app, rows, cols } = input;
+    // Others editing live: their selection outlined in their colour, with their name.
+    for remote in app.remote_selections.iter().filter(|r| r.sheet_name == sh.name && range_in_pane(r.range, rows, cols)) {
+        let rr = geo.range_rect(sh, remote.range);
+        for side in outline_bands(rr, 2.0, p.clip_rect()) {
+            p.rect_filled(side, 0.0, remote.colour);
+        }
+        let font = egui::FontId::proportional(10.0);
+        let galley = p.layout_no_wrap(remote.name.clone(), font, Color32::WHITE);
+        let tag = Rect::from_min_size(rr.left_top() - vec2(1.0, galley.size().y + 2.0), galley.size() + vec2(6.0, 2.0));
+        p.rect_filled(tag, 2.0, remote.colour);
+        p.galley(tag.min + vec2(3.0, 1.0), galley, Color32::WHITE);
+    }
     // Fill all areas except the active cell.
     for rect in selection_fill_where(geo, sh, sel, outline, |r| range_in_pane(*r, rows, cols)) {
         p.rect_filled(rect, 0.0, t.sel_fill);

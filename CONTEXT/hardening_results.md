@@ -8,7 +8,7 @@ The measured results of hardening. **This is a stub**, filled in during Phase 4 
 
 | Measure | Target | Result |
 |:---|:---|:---|
-| Command delivery to other editors (p95, 10 editors in one workbook) | ≤ 300 ms | |
+| Command delivery to other editors (p95, 20 editors in one workbook, Decision 56) | ≤ 300 ms | **9 ms** (median 3 ms, max 12 ms; 3,800 deliveries; Phase 3 W-310, `services/collab/tests/live.rs`, owner's Mac, release build, storage faked in memory: the real store adds one database write per change). Repeat on the VPS in Phase 4. |
 | Open a 10 MiB workbook | | |
 | Save a 50 MiB workbook | | |
 | Rust service memory with N open workbooks | | |

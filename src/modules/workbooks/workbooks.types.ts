@@ -38,6 +38,8 @@ export interface VersionDto {
   name: string | null;
   source: "CREATE" | "SAVE" | "AUTOSAVE" | "IMPORT" | "RESTORE" | "LIVE_SNAPSHOT";
   createdBy: { id: string; displayName: string } | null;
+  /** Live editing snapshots: everyone whose changes it holds (Decision 56). */
+  contributors: Array<{ id: string; displayName: string }>;
   createdAt: string;
   sizeBytes: number;
   /** For a restore: the number of the version it brought back, when that still exists. */

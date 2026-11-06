@@ -51,3 +51,11 @@ export function checkAccess(
   if (!principal) return "unauthenticated";
   return codes.some((code) => can(principal, code)) ? "allow" : "forbidden";
 }
+
+/**
+ * Decision 57: only a Super Admin may use the app from outside the allowed networks. The guard is
+ * the one place that reads the bypass.
+ */
+export function mayWorkFromAnyNetwork(principal: Principal | null): principal is Principal {
+  return principal?.bypassesAccess === true;
+}

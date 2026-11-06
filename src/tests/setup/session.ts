@@ -6,7 +6,7 @@ import { networkService } from "@/modules/network";
 import { resolveWorkbookRoleWithSharing } from "@/modules/sharing";
 import { configureWorkbookRoleResolver } from "@/shared/rbac/workbookAccess";
 import { getEnv } from "@/shared/config/env";
-import { configureNetworkGuard } from "@/shared/http/networkGuard";
+import { configureNetworkGuard, configureOutsideAccessRecorder } from "@/shared/http/networkGuard";
 import {
   configurePrincipalResolver,
   setPrincipalResolverForTests,
@@ -18,6 +18,7 @@ export function installRealResolvers(): void {
   setPrincipalResolverForTests(null);
   configurePrincipalResolver(createSessionPrincipalResolver());
   configureNetworkGuard((request) => networkService.check(request));
+  configureOutsideAccessRecorder((input) => networkService.recordOutsideAccess(input));
   configureWorkbookRoleResolver(resolveWorkbookRoleWithSharing);
   networkService.invalidate();
 }

@@ -19,6 +19,14 @@ interface Overview {
   rules: Rule[];
   yourIp: string | null;
   blocked: Array<{ id: string; ip: string; method: string; path: string; at: string }>;
+  outsideAccess: Array<{
+    id: string;
+    ip: string | null;
+    who: string;
+    email: string;
+    kind: string;
+    at: string;
+  }>;
 }
 
 export function NetworkPanel({ canManage }: { canManage: boolean }) {
@@ -208,6 +216,36 @@ export function NetworkPanel({ canManage }: { canManage: boolean }) {
             </tbody>
           </table>
         )}
+      </div>
+      <h2 className={styles.heading}>Super Admin access from outside</h2>
+      <p className={styles.sub}>
+        Super Admins may sign in from any network; each time is recorded here and in the audit
+        trail.
+      </p>
+      <div className={styles.panel}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th>When</th>
+              <th>Who</th>
+              <th>Address</th>
+              <th>What</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data?.outsideAccess.map((row) => (
+              <tr key={row.id}>
+                <td>{formatInstant(parseInstant(row.at), "dateTime")}</td>
+                <td>
+                  {row.who} <span className={styles.muted}>{row.email}</span>
+                </td>
+                <td>{row.ip ?? "unknown"}</td>
+                <td>{row.kind === "sign-in" ? "Signed in" : "Used the app"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {data && data.outsideAccess.length === 0 ? <p className={styles.empty}>None yet.</p> : null}
       </div>
     </section>
   );

@@ -15,6 +15,7 @@ pub mod display;
 pub mod fill;
 pub mod io;
 pub mod links;
+pub mod live;
 pub mod macros;
 pub mod outline;
 pub mod paper;
@@ -492,8 +493,10 @@ pub struct Session {
     /// The recording buffer while a recorder runs ([`Session::start_recording`]): top-level
     /// commands with the place they ran in, kept apart from the journal.
     pub recorder: Option<record::Recorder>,
+    /// Live co-editing capture (JD Sheets, [`live`]); None unless a host starts it.
+    pub live: Option<live::Capture>,
     /// How many `execute` calls are running (0 between top-level commands).
-    depth: u32,
+    pub(crate) depth: u32,
     /// The steps the last successful `automate.runScript` or `macro.run` ran while a recorder was
     /// on, for the recorder to keep with that step (see [`record::Recorder::ran`]); taken by the
     /// recording hook.
@@ -668,6 +671,9 @@ impl Session {
     /// unless an undo group is open on the document (the group then makes the step).
     /// Panics inside commands are caught and reported; the workbook is restored.
     pub fn execute(&mut self, id: &str, params: Json) -> Result<Json> {
+        if let Some(undone) = self.live_intercept(id) {
+            return undone;
+        }
         let spec = find_command(id).ok_or_else(|| EngineError::UnknownCommand(id.to_string()))?;
         if let Err(why) = (spec.enabled)(self) {
             return Err(EngineError::Disabled(id.to_string(), why));
@@ -713,10 +719,11 @@ impl Session {
             None => Vec::new(),
         };
         // The recorder keeps top-level calls with the place they ran in.
-        let place = (self.depth == 0 && self.recorder.is_some()).then(|| match self.active() {
+        let place = (self.depth == 0 && (self.recorder.is_some() || self.live.is_some())).then(|| match self.active() {
             Some(d) => (d.uid, d.wb.active_sheet(), d.wb.active().map(|sh| sh.name.clone()).unwrap_or_default(), d.selection.clone()),
             None => (0, 0, String::new(), Selection::default()),
         });
+        let live_before = self.live_before(id, place.as_ref());
         let doc_uid = before.as_ref().map(|(uid, ..)| *uid);
         let requests_before = self.ui_requests.len();
         let marked = doc_uid.zip(start).map(|(uid, (_, len))| (uid, len));
@@ -782,6 +789,7 @@ impl Session {
         if result.is_err() {
             self.rollback_groups_from(first_group);
         }
+        self.live_after(id, &params, &result, live_before, before.as_ref().map(|(_, wb, _)| wb.clone()));
         if spec.journal && result.is_ok() {
             // A command that started recording is not part of the recording; one that stopped it
             // finds no recorder. A menu-style call that only opened a dialog (`file.open` with no

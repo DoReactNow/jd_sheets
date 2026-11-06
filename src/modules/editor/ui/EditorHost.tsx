@@ -12,10 +12,19 @@ import type { ReactNode } from "react";
 import { apiRequest } from "@/shared/api/client";
 import { toFriendlyError, type FriendlyError } from "@/shared/api/friendlyError";
 import { APP_CONFIG } from "@/shared/config/appConfig";
+import { systemClock } from "@/shared/time";
 import { ErrorMessage } from "@/shared/ui/ErrorMessage";
 import { SupportContact } from "@/shared/ui/SupportContact";
 import { createEditorBridge, type BridgeState, type SaveOutcome } from "../bridge/editorBridge";
-import type { EditorMode } from "../bridge/messages";
+import type { EditorMode, PresencePerson } from "../bridge/messages";
+import {
+  createLiveConnection,
+  type LiveConnection,
+  type LiveRole,
+  type LiveState,
+  type SocketLike,
+  type TokenResult,
+} from "../live/liveConnection";
 import {
   createEditingSession,
   type EditingSession,
@@ -130,6 +139,32 @@ async function askForLease(id: string, tabId: string, takeOver: boolean): Promis
   return { status: "ERROR" };
 }
 
+/** The editor's mode for a live role; view-only while held or full. */
+function modeForLive(role: LiveRole, viewOnly: boolean): EditorMode {
+  if (viewOnly || role === "VIEWER") return "view";
+  return role === "COMMENTER" ? "comment" : "edit";
+}
+
+async function fetchCollabToken(id: string): Promise<TokenResult> {
+  const result = await apiRequest<{
+    token: string;
+    url: string;
+    expiresAt: string;
+    heldBy: string | null;
+  }>(`/api/workbooks/${id}/collab-token`, { method: "POST" });
+  if (result.ok) return { ok: true, ...result.data };
+  return { ok: false, noAccess: result.error.code === "NOT_FOUND" };
+}
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]!.toUpperCase())
+    .join("");
+}
+
 export function EditorHost({
   workbookId,
   versionId,
@@ -192,14 +227,82 @@ export function EditorHost({
 
   // An old version, an administrator's open and a trashed workbook are always view only.
   const fixed = info !== null && (special !== null || info.trashedAt !== null);
+  // Live editing first (Phase 3); the one-editor lease when the live service can't be reached.
+  const [path, setPath] = useState<"live" | "fallback" | null>(null);
+  const [live, setLive] = useState<LiveState | null>(null);
+  const liveRef = useRef<LiveConnection | null>(null);
+  const firstWorkbook = useRef<{ bytes: ArrayBuffer; seq: number } | null>(null);
+  const liveMode: EditorMode | null =
+    live?.role && path === "live"
+      ? modeForLive(live.role, live.heldBy !== null || live.full)
+      : null;
   const view: SessionView | null = fixed
     ? { mode: "view", notice: { kind: "read-only" } }
-    : sessionView;
-  const initialMode: EditorMode | null = fixed ? "view" : sessionMode;
+    : path === "live" && liveMode
+      ? { mode: liveMode, notice: { kind: "none" } }
+      : sessionView;
+  const initialMode: EditorMode | null = fixed ? "view" : path === "live" ? liveMode : sessionMode;
 
-  // 2. The editing session: mode, lease and autosave.
+  // 2a. Live editing: connect; switch to the lease when the service can't be reached.
   useEffect(() => {
     if (!info || special || info.trashedAt) return;
+    let decided = false;
+    const connection = createLiveConnection({
+      fetchToken: () => fetchCollabToken(info.id),
+      openSocket: (url) => new WebSocket(url) as unknown as SocketLike,
+      onWorkbook: (bytes, seq, first) => {
+        if (first) {
+          firstWorkbook.current = { bytes, seq };
+          decided = true;
+          setPath("live");
+        } else {
+          bridgeRef.current?.resync(`${info.title}.${APP_CONFIG.workbooks.extension}`, bytes, seq);
+        }
+      },
+      onServerMessage: (message) => bridgeRef.current?.apply(message),
+      onState: (state) => {
+        setLive(state);
+        if (state.status === "unavailable" && !decided) {
+          decided = true;
+          setPath("fallback");
+        }
+      },
+      timers: {
+        setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+        clearTimeout: (h) => window.clearTimeout(h as number),
+      },
+      now: () => systemClock.now().getTime(),
+    });
+    liveRef.current = connection;
+    connection.start();
+    return () => {
+      connection.stop();
+      liveRef.current = null;
+    };
+  }, [info, special]);
+
+  // The editor follows a role change or a full workbook at once (P3-WS-05).
+  useEffect(() => {
+    if (liveMode) bridgeRef.current?.setMode(liveMode);
+  }, [liveMode]);
+
+  // Others' selections in the grid (P3-PRES-02).
+  useEffect(() => {
+    if (!live) return;
+    const people: PresencePerson[] = live.people
+      .filter((p) => p.userId !== live.me && p.selection)
+      .map((p) => ({
+        name: p.name,
+        colour: p.colour,
+        sheetName: p.selection!.sheetName,
+        range: p.selection!.range,
+      }));
+    bridgeRef.current?.presence(people);
+  }, [live]);
+
+  // 2b. The one-editor lease and autosave (Phase 2), only when live editing isn't available.
+  useEffect(() => {
+    if (!info || special || info.trashedAt || path !== "fallback") return;
     const session = createEditingSession({
       role: info.role,
       lease: (takeOver) => askForLease(info.id, tabId, takeOver),
@@ -232,7 +335,7 @@ export function EditorHost({
       session.stop();
       sessionRef.current = null;
     };
-  }, [info, special, tabId]);
+  }, [info, special, tabId, path]);
 
   const mayExport = info
     ? info.role === "OWNER" || info.role === "EDITOR" || info.allowDownloadForReaders
@@ -253,6 +356,18 @@ export function EditorHost({
       editor: () => frame.current?.contentWindow ?? null,
       origin: window.location.origin,
       load: async () => {
+        // Live: the workbook came from the server with the welcome.
+        if (firstWorkbook.current) {
+          const { bytes } = firstWorkbook.current;
+          return {
+            ok: true,
+            workbook: {
+              name: `${info.title}.${APP_CONFIG.workbooks.extension}`,
+              bytes,
+              versionId: "live",
+            },
+          };
+        }
         try {
           const response = await fetch(contentUrl, { credentials: "same-origin" });
           if (!response.ok) {
@@ -277,6 +392,11 @@ export function EditorHost({
         }
       },
       save: (bytes, base, options) => putWorkbook(info.id, bytes, base, { ...options, tabId }),
+      liveStart: () => firstWorkbook.current?.seq ?? null,
+      onCommand: (id, baseSeq, step) => liveRef.current?.sendCommand(id, baseSeq, step),
+      onResyncNeeded: () => liveRef.current?.requestResync(),
+      onSelection: (sheetName, range) => liveRef.current?.sendSelection(sheetName, range),
+      onLiveSave: () => liveRef.current?.requestSnapshot(),
       onSaved: (outcome) => {
         sessionRef.current?.saveFinished(outcome.ok);
         if (
@@ -416,7 +536,23 @@ export function EditorHost({
             {info?.title ?? "Opening…"}
           </h1>
         )}
-        {mode === "edit" ? (
+        {path === "live" && live ? (
+          <span
+            className={styles.status}
+            data-status={live.status === "live" ? "saved" : "unsaved"}
+            role="status"
+            aria-live="polite"
+            data-testid={mode === "edit" ? "live-status" : "editor-mode"}
+          >
+            {live.status !== "live"
+              ? "Reconnecting…"
+              : mode !== "edit"
+                ? MODE_TEXT[mode]
+                : live.saving
+                  ? "Saving a version…"
+                  : "Live"}
+          </span>
+        ) : mode === "edit" ? (
           <span
             className={styles.status}
             data-status={state.status}
@@ -433,6 +569,20 @@ export function EditorHost({
               : ""}
           </span>
         )}
+        {path === "live" && live && live.people.length > 0 ? (
+          <ul className={styles.people} aria-label="People in this workbook">
+            {live.people.map((p) => (
+              <li
+                key={p.userId}
+                className={styles.avatar}
+                style={{ background: p.colour }}
+                title={`${p.name}${p.userId === live.me ? " (you)" : ""} · ${p.role.toLowerCase()}`}
+              >
+                {initials(p.name)}
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <div className={styles.actions}>
           {!special && role && role !== "VIEWER" ? (
             <button type="button" className="btn" onClick={() => setPanel("history")}>
@@ -452,7 +602,26 @@ export function EditorHost({
         </div>
       </header>
 
-      {view?.notice.kind === "someone-else" ? (
+      {path === "live" && live?.heldBy ? (
+        <div className={styles.banner} role="status">
+          <span>
+            {live.heldBy} is editing without live editing. You can view it until they finish.
+          </span>
+        </div>
+      ) : path === "live" && live?.full ? (
+        <div className={styles.banner} role="status">
+          <span>
+            The most people who can edit this workbook at once are already editing. You can view it.
+          </span>
+        </div>
+      ) : live?.status === "no-access" ? (
+        <div className={styles.banner} role="alert">
+          <span>You no longer have access to this workbook.</span>
+          <Link className="btn" href="/">
+            Back to your workbooks
+          </Link>
+        </div>
+      ) : view?.notice.kind === "someone-else" ? (
         <div className={styles.banner} role="status">
           <span>
             {view.notice.holderName} is editing. You can view it; refresh to edit when they finish.

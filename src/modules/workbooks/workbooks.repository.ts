@@ -23,6 +23,8 @@ export interface NewVersion {
   sha256: string;
   source: WorkbookVersionSource;
   createdById: string | null;
+  /** Live snapshots: the people whose changes it holds (Decision 56). */
+  contributorIds?: string[];
 }
 
 const workbookSelect = {
@@ -250,6 +252,7 @@ export const workbooksRepository = {
         createdAt: true,
         restoredFromId: true,
         createdById: true,
+        contributorIds: true,
         storageKey: true,
       },
     });
@@ -430,6 +433,22 @@ export const leaseRepository = {
         OR (${input.takeOver} AND workbooks_edit_leases.user_id = EXCLUDED.user_id)
       RETURNING tab_id`);
     return rows.length === 1;
+  },
+
+  /** True while live editing goes on in the workbook (P3-FALLBACK-02). */
+  async liveNow(workbookId: string, now: Date): Promise<boolean> {
+    const row = await getPrisma().workbook.findUnique({
+      where: { id: workbookId },
+      select: { liveUntil: true },
+    });
+    return row?.liveUntil != null && row.liveUntil > now;
+  },
+
+  async setLiveUntil(workbookId: string, until: Date | null): Promise<void> {
+    await getPrisma().workbook.updateMany({
+      where: { id: workbookId },
+      data: { liveUntil: until },
+    });
   },
 
   /** The current, unexpired lease, or null. */

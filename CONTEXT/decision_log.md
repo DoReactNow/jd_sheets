@@ -696,7 +696,7 @@ From a fresh clone of the pull-request branch: lint, typecheck, builds, 232 unit
 - The **edge allowlist in Caddy is optional**: `EDGE_ALLOWED_CIDRS` may stay open (`0.0.0.0/0 ::/0`), so a changed office address never needs a server edit. (Amends Decision 18, layer 1.)
 - **Where the rules apply:** every page (checked when the page is rendered) and every API route (in `route()`), including sign-in and sign-up. Exempt: `/api/health` (container health checks) and the static editor files (they hold no data; every workbook byte goes through the API). A refused page shows "This isn't available from this network"; a refused API call answers `NETWORK_BLOCKED` (403).
 - **Self-lockout:** a change that would exclude the person's own current address is refused, the last enabled rule cannot be removed while enforcement is on, and every change is audited.
-- **When the office address changes and nobody inside can reach the page**, the recovery command on the server adds the new range: `npm run admin:reset-ip-rules -- --cidr <range>`. A "Super Admin may sign in from anywhere" exception is **not** built; it is an Open question for the owner (Decision 49).
+- **When the office address changes and nobody inside can reach the page**, the recovery command on the server adds the new range: `npm run admin:reset-ip-rules -- --cidr <range>`. A Super Admin may also sign in from anywhere and add the new range on the Network access page (Decision 57).
 
 ---
 
@@ -728,10 +728,10 @@ From a fresh clone of the pull-request branch: lint, typecheck, builds, 232 unit
 
 ---
 
-### Decision 49: Open: Super Admin Access From Outside the Allowed Networks
+### Decision 49: Super Admin Access From Outside the Allowed Networks (resolved by Decision 57)
 
 **Date:** 2026-11-06
-**Status:** Open (not blocking; decide before go-live)
+**Status:** Resolved by Decision 57 (option b)
 
 Because office addresses change, a change can leave everyone outside the allowed ranges until someone with server access runs the recovery command. Options: (a) keep it as is (server command only); (b) let **only Super Admins** sign in from anywhere, every such sign-in audited and shown on the Network page; (c) a one-time emergency code sent to the Super Admin's email. The current build is (a).
 
@@ -825,3 +825,74 @@ Because office addresses change, a change can leave everyone outside the allowed
 - **Ribbon greying (completes P2-MODE-02):** `SheetApp` has an `access` setting (`Edit`, `Comment`, `View`). In view mode the ribbon disables every tab except View; in comment mode it also leaves Review usable. The after-each-frame rule of Decision 54 still applies everywhere else (keyboard, formula bar, context menus).
 - **Phase 3:** the planned "patch 0002" (command messages) becomes direct changes, including to GridCraft's engine and UI where that is simpler.
 - **Scenarios retired:** P0-EDIT-01 and P0-EDIT-02 (patches apply, and a broken patch names itself) and P2-MODE-01 (each patch names its upstream pull request) no longer apply.
+
+---
+
+## J. Phase 3 decisions
+
+### Decision 56: Phase 3 Open Questions Answered (TQ-06 to TQ-09)
+
+**Date:** 2026-11-06
+**Status:** Accepted (owner: "go with your recommendation" on all four; about 25–30 staff, 15–20 people on one sheet at once, "like Google Sheets")
+
+#### Decision
+- **Undo (TQ-06, P3-PATCH-04):** each person undoes only their own changes, as in Google Sheets.
+- **Same cell at the same moment (TQ-07, P3-REBASE-02, -03):** the change the server receives last wins for everyone. When someone inserts or deletes rows, columns or sheets, other people's pending edits and formula references shift with them. An edit that can no longer apply (its sheet was deleted) is refused, and that person's editor resyncs with a friendly message.
+- **People per workbook (TQ-08, P3-PERF-03):** up to **25 editors at once** on one workbook (the owner expects 15–20), with any number of viewers. The next editor opens in view mode with a friendly message. Phase 4 load targets (TQ-10): about 30 staff, 20 people editing one workbook at once.
+- **Versions during live editing (TQ-09, P3-SNAP-01, -03):** a version is saved every **10 minutes** while people are editing, and when the **last person leaves**. It is labelled "Live editing" with the names of everyone who changed it. Between versions nothing is lost: every accepted change is stored in `collab_ops` at once (P3-RECOV-01). This replaces the "200 commands or 30 seconds" rule in test_scenarios.md.
+- **Performance target (P3-PERF-01):** a change reaches the others within 300 ms (95th percentile) on the office network with **20** editors.
+
+---
+
+### Decision 57: Super Admins Sign In From Any Network (resolves Decision 49)
+
+**Date:** 2026-11-06
+**Status:** Accepted (owner: "super admin can login from anywhere from any network, other than the super admin, everyone will have access on only allowed IP network")
+
+#### Decision
+- A signed-in **Super Admin** passes the network rules from any address. Everyone else, and anyone not yet signed in, still needs an allowed network.
+- The sign-in page stays reachable from any address, so a Super Admin can sign in (a normal user signing in from outside gets the blocked page after sign-in, and no session is kept). The sign-in rate limits and lockout apply as before.
+- A Super Admin's sign-in from outside is always audited (`network.outsideAccess`); their requests from outside are audited at most once per person and address every 10 minutes. Both show on the Network access page. Someone else signing in from outside is audited as `auth.sign_in_refused_network`.
+- Caddy's edge allowlist (`EDGE_ALLOWED_CIDRS`, Decision 46) must therefore allow everything, and the app's network rules do the filtering (Phase 4 sets this up).
+- Built as the first work item of Phase 3 (W-301).
+
+---
+
+### Decision 58: Phase 3 Details Settled While Building
+
+**Date:** 2026-11-06
+**Status:** Accepted (amends Decision 22 and database_schema.md 3.15)
+
+#### Decision
+- **Replay, proven first.** GridCraft's macro recorder already keeps each command with its sheet and selection. Our engine's `live` module captures every change as such a step, and another session replays it exactly. Proven on all 120 commands that change a workbook, including through JSON. Changes:
+  - **Paste** carries its copied cells.
+  - **Toggles** (Bold) are sent with the state they set.
+  - **View-only commands** (selection, sheet tabs, zoom, windows) are never sent.
+- **Where the rules live.** All of these are in our GridCraft's engine (`crates/engine/src/live.rs`) and are tested there with up to 8 simulated editors, random delays and row/column edits:
+  - the editor side (pending changes, rewind and re-apply);
+  - the server side (ordering, roles, comment authors, retries);
+  - the shifting rule (Decision 56: pending changes shift through others' row and column inserts and deletes; a change to deleted cells is refused and its sender resyncs).
+  
+  The Rust service only does networking and storage.
+- **Undo while live** restores this person's changed cells where nobody changed them since, as a normal change everyone receives (`live.setCells`). A structural change (rows, sheets, merges) can't be undone while others edit; a short message says so.
+- **Storage through the app** (amends "written only by the Rust service"). The Rust service never touches the database: it calls the app's internal routes to load a workbook, store each accepted change *before* anyone hears of it, and save versions.
+  - `collab_ops.baseVersionId` is the version a change builds on. After a restart the service loads the current version and replays the changes built on it.
+  - A "Live editing" version becomes the next base; a normal save or a restore starts a new one.
+  - Old changes are pruned nightly after 7 days (`collab.pruneOps`).
+- **Versions while live (Decision 56):** every 10 minutes, when the last person leaves, and when someone presses Ctrl/Cmd+S ("save a version now"). Labelled with contributors and no single author.
+- **Live editing and the one-editor lease never both allow editing (P3-FALLBACK-02).**
+  - The service marks the workbook as edited live (`live_until`, renewed every 30 s); meanwhile nobody can take the lease.
+  - While someone holds the lease, a live token is view-only.
+  - The editor falls back to the lease only when it can't reach the live service at all (P3-FALLBACK-01).
+- **Access changes** (shares, group members, deactivation, Trash) close the affected live connections; they reconnect with a fresh token. A restore reloads the live workbook for everyone.
+- **WebSocket protocol:**
+  - The first message carries the token, never the address.
+  - Size limit 8 MB (a paste carries its cells); 300 messages per 10 seconds; a close jumps the queue.
+  - With no proxy in front (local runs) the socket address stands in for the forwarded address, as the app does (Decision 50).
+  - The browser uses `COLLAB_PUBLIC_URL` (default: `COLLAB_URL` as `ws://`), which the page's security policy allows. The service reaches the app at `APP_INTERNAL_URL` (default `APP_URL`).
+- **Presence:**
+  - Colours come from the user id, so they're stable.
+  - One entry per person.
+  - Others' selections are drawn in the grid by our GridCraft (`SheetApp::remote_selections`).
+- **Measured (P3-PERF-01):** 20 editors, delivery p95 9 ms (hardening_results.md).
+- **Not done in Phase 3:** a Viewer's refused changes are logged by the service, not written to the audit trail (P3-ROLE-01's "audited"). The service has no database access; Phase 4 can add an internal audit route if wanted.

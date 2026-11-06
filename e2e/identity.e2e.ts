@@ -80,7 +80,11 @@ test.describe("from another network (journey 6)", () => {
   test.use({ extraHTTPHeaders: { "x-forwarded-for": "198.51.100.7" } });
 
   test("sees the blocked page and cannot call the API", async ({ page, request }) => {
+    // Sign-in itself is open to every network (a Super Admin may work from anywhere,
+    // Decision 57); everything else shows the blocked page.
     await page.goto("/sign-in");
+    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+    await page.goto("/");
     await expect(
       page.getByRole("heading", { name: "This isn't available from this network" }),
     ).toBeVisible();

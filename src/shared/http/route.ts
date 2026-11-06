@@ -10,9 +10,14 @@ import { AppError } from "@/shared/errors/AppError";
 import { GENERIC_FIELD_MESSAGE } from "@/shared/errors/errorCatalog";
 import { parseInput, toErrorResponse } from "@/shared/errors/toErrorResponse";
 import { logger as rootLogger, type Logger } from "@/shared/logger";
-import { checkNetwork } from "@/shared/http/networkGuard";
+import { checkNetwork, recordOutsideAccess } from "@/shared/http/networkGuard";
 import { readSessionToken } from "@/shared/http/sessionCookie";
-import { checkAccess, requiredPermissions, type Access } from "@/shared/rbac/guard";
+import {
+  checkAccess,
+  mayWorkFromAnyNetwork,
+  requiredPermissions,
+  type Access,
+} from "@/shared/rbac/guard";
 import type { Principal } from "@/shared/rbac/principal";
 import { resolvePrincipal } from "@/shared/rbac/principalResolver";
 import {
@@ -39,6 +44,8 @@ export interface RouteContext<I, P> {
   principal: Principal | null;
   /** Set when the route declares `workbook`: the caller's effective role on it. */
   workbookRole: WorkbookRole | null;
+  /** True when the request comes from outside the allowed networks (Super Admins, sign-in). */
+  outsideNetwork: boolean;
   logger: Logger;
 }
 
@@ -65,8 +72,11 @@ export interface RouteOptions<T, I, P> {
   workbook?: WorkbookRequirement<P>;
   /** Validates the JSON body (or the query string for GET, HEAD and DELETE). */
   input?: z.ZodType<I>;
-  /** false only for /api/health, which container health checks call (Decision 46). */
-  network?: boolean;
+  /**
+   * false only for /api/health, which container health checks call (Decision 46). "sign-in": open
+   * to every network, the handler is told (Decision 57: Super Admins sign in from anywhere).
+   */
+  network?: boolean | "sign-in";
   /** true for the routes a person who must change their password may still use. */
   allowWhilePasswordChangeRequired?: boolean;
   handler: (context: RouteContext<I, P>) => Promise<HandlerResult<T> | RawResult>;
@@ -151,16 +161,23 @@ export function route<T, I = undefined, P extends object = Record<string, string
     const headers = { "x-request-id": requestId, "cache-control": "no-store" };
     try {
       const internal = options.access === "internal";
+      // Outside the allowed networks only sign-in and a signed-in Super Admin pass (Decision 57).
+      let outside: { ip: string | null; path: string } | null = null;
       if (!internal && options.network !== false) {
+        const path = new URL(request.url).pathname;
         const decision = await checkNetwork({
           headers: request.headers,
           method: request.method,
-          path: new URL(request.url).pathname,
+          path,
         });
-        if (!decision.allowed) throw new AppError("NETWORK_BLOCKED");
+        if (!decision.allowed) outside = { ip: decision.ip, path };
       }
       if (!internal) assertSameOrigin(request);
       const principal = internal ? null : await resolvePrincipal(request);
+      if (outside && options.network !== "sign-in") {
+        if (!mayWorkFromAnyNetwork(principal)) throw new AppError("NETWORK_BLOCKED");
+        await recordOutsideAccess({ userId: principal.userId, ...outside });
+      }
       const decision = checkAccess(options.access, principal, {
         internalAuthorized: internal && hasInternalToken(request.headers),
       });
@@ -194,6 +211,7 @@ export function route<T, I = undefined, P extends object = Record<string, string
         input,
         principal,
         workbookRole,
+        outsideNetwork: outside !== null,
         logger,
       });
       if ("response" in result) {

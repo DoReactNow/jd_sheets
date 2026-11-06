@@ -42,6 +42,22 @@ export async function recordAudit(tx: AuditTx, input: AuditInput): Promise<strin
   return created.id;
 }
 
+/** The newest events of one kind, with who did them (the Network page's outside access). */
+export function recentAuditEvents(action: string, limit: number) {
+  return getPrisma().auditEvent.findMany({
+    where: { action },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: limit,
+    select: {
+      id: true,
+      ip: true,
+      details: true,
+      createdAt: true,
+      actor: { select: { displayName: true, email: true } },
+    },
+  });
+}
+
 /** One event by id (the administrator's audited open, P2-ADMINWB-03). */
 export function findAuditEvent(id: string) {
   return getPrisma().auditEvent.findUnique({

@@ -470,6 +470,12 @@ These apply to every endpoint, screen, job, table and Rust handler. A plan does 
 
 ## Phase 3: Live collaboration
 
+### Super Admins from any network (Decision 57)
+- **P3-NETSA-01** A Super Admin signs in and works from an address outside the allowed networks; every such sign-in and request is audited and shown on the Network access page.
+- **P3-NETSA-02** Anyone else signing in from outside gets the blocked page, and no session is kept.
+- **P3-NETSA-03** From outside, every page and API route except sign-in needs a Super Admin session.
+- **P3-NETSA-04** Sign-in limits and lockout still apply from outside.
+
 ### Connection and token
 - **P3-WS-01** A valid token opens the WebSocket; the client receives the current sequence number and presence.
 - **P3-WS-02** Expired, forged, wrong-workbook or wrong-IP tokens are refused at connect.
@@ -481,7 +487,7 @@ These apply to every endpoint, screen, job, table and Rust handler. A plan does 
 - **P3-WS-08** Network drops reconnect automatically and replay missed commands from the sequence number.
 
 ### Patch 0002 and the bridge
-- **P3-PATCH-01** Patch 0002 applies and names its upstream pull request.
+- **P3-PATCH-01** *(Retired by Decision 55: GridCraft is our own code, no patches.)*
 - **P3-PATCH-02** Every command run locally is sent once with its parameters; commands that only change the person's own view (scroll, selection) are not sent as edits.
 - **P3-PATCH-03** Applied commands from others do not echo back.
 - **P3-PATCH-04** Applied commands from others do not enter the person's own undo history (a stated rule for undo).
@@ -519,7 +525,7 @@ These apply to every endpoint, screen, job, table and Rust handler. A plan does 
 - **P3-PRES-05** Names in presence come from the token, never from the client.
 
 ### Snapshots, recovery and fallback
-- **P3-SNAP-01** After 200 commands or 30 seconds of quiet, a snapshot becomes a new version through the app.
+- **P3-SNAP-01** Every 10 minutes while people are editing, and when the last person leaves, a snapshot becomes a new version through the app (Decision 56).
 - **P3-SNAP-02** A snapshot failure retries and never loses commands.
 - **P3-SNAP-03** Snapshots made by the service show "Live edits" as the author with the people involved (a stated rule).
 - **P3-RECOV-01** After a service restart, the workbook loads from the last version plus later commands, with nothing lost.
@@ -530,9 +536,9 @@ These apply to every endpoint, screen, job, table and Rust handler. A plan does 
 - **P3-RESTORE-01** Restoring a version during a live session resyncs every client to the restored content.
 
 ### Performance and limits
-- **P3-PERF-01** A command reaches other clients within 300 ms at the 95th percentile on the local network with 10 editors.
+- **P3-PERF-01** A command reaches other clients within 300 ms at the 95th percentile on the local network with 20 editors (Decision 56).
 - **P3-PERF-02** An idle workbook session is unloaded from memory after 10 minutes without connections.
-- **P3-PERF-03** A stated maximum of editors per workbook; the next one opens in view mode with a friendly message.
+- **P3-PERF-03** At most 25 editors per workbook (Decision 56); the next one opens in view mode with a friendly message.
 
 ### Journey
 - **P3-E2E-01** Two browsers edit the same workbook live and both end with the same values (journey 7).
@@ -573,8 +579,8 @@ These apply to every endpoint, screen, job, table and Rust handler. A plan does 
 | TQ-03 | After an ownership transfer, does the old owner keep Editor access (P2-ADMINWB-02)? | 2 (answered: Decision 52) |
 | TQ-04 | Same person, two tabs, one lease: block the second tab or move the lease (P2-LEASE-08)? | 2 (answered: Decision 52) |
 | TQ-05 | Autosave timings (P2-SAVE-01) | 2 (answered: Decision 52) |
-| TQ-06 | Undo with live co-editing: own changes only (recommended), or everything (P3-PATCH-04)? | 3 |
-| TQ-07 | Rebasing rule per command type (P3-REBASE-03) | 3 |
-| TQ-08 | Maximum editors per workbook (P3-PERF-03) | 3 |
-| TQ-09 | How live snapshots are labelled in history (P3-SNAP-03) | 3 |
-| TQ-10 | Load-test targets: number of staff, peak concurrent editors, largest expected workbook (P4-LOAD-01) | 4 |
+| TQ-06 | Undo with live co-editing: own changes only (recommended), or everything (P3-PATCH-04)? | 3 (answered: Decision 56) |
+| TQ-07 | Rebasing rule per command type (P3-REBASE-03) | 3 (answered: Decision 56) |
+| TQ-08 | Maximum editors per workbook (P3-PERF-03) | 3 (answered: Decision 56) |
+| TQ-09 | How live snapshots are labelled in history (P3-SNAP-03) | 3 (answered: Decision 56) |
+| TQ-10 | Load-test targets: number of staff, peak concurrent editors, largest expected workbook (P4-LOAD-01) | 4 (partly answered: Decision 56, about 30 staff, 20 editors on one workbook) |

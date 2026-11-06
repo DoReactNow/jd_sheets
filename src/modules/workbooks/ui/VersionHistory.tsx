@@ -63,6 +63,9 @@ export function VersionHistory({
                 {formatInstant(parseInstant(v.createdAt), "dateTime")} · {SOURCE[v.source]}
                 {v.restoredFromNumber ? ` from version ${v.restoredFromNumber}` : ""}
                 {v.createdBy ? ` · ${v.createdBy.displayName}` : ""}
+                {v.contributors.length > 0
+                  ? ` · ${v.contributors.map((c) => c.displayName).join(", ")}`
+                  : ""}
                 {v.current ? " · current" : ""}
               </span>
               {naming === v.id ? (

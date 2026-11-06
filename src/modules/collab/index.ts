@@ -1,5 +1,5 @@
-// Public API of the collab module. Phase 0: the token contract with the Rust service.
-// Phase 3 adds the token route, the internal snapshot route and the access-changed push.
+// Public API of the collab module: the token contract with the Rust service (Phase 0), and live
+// co-editing's tokens, internal routes and nightly pruning (Phase 3).
 export {
   collabClaims,
   issueCollabToken,
@@ -8,3 +8,5 @@ export {
   type CollabTokenInput,
   type TokenRole,
 } from "./token";
+export { collabPublicUrl, collabService, type CollabTokenDto } from "./collab.service";
+export { collabJobs, collabSchedules, pruneOpsJob } from "./collab.jobs";

@@ -15,6 +15,7 @@ use serde::Serialize;
 use crate::config::Limits;
 
 pub mod diff;
+pub mod live;
 
 /// The name GridCraft uses to pick the format; never a user's file name.
 const BOOK_NAME: &str = "Book.xlsx";

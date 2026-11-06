@@ -297,6 +297,45 @@ export function createWorkbooksService(deps: WorkbooksServiceDeps) {
     },
 
     /**
+     * A live editing snapshot from the Rust service (Decisions 22, 56): a new version on top of
+     * `baseVersionId`, labelled "Live editing" with its contributors. Refused with
+     * WORKBOOK_CHANGED when another version became current meanwhile (a restore).
+     */
+    async addLiveSnapshot(
+      workbookId: string,
+      baseVersionId: string,
+      bytes: Uint8Array,
+      contributorIds: string[],
+    ): Promise<SavedVersionDto> {
+      if (bytes.byteLength > APP_CONFIG.workbooks.maxBytes)
+        throw new AppError("WORKBOOK_TOO_LARGE");
+      const { versionId, storageKey, stored } = await storeVersionFile(workbookId, bytes);
+      const now = clock.now();
+      try {
+        const { number } = await repository.addVersion(
+          workbookId,
+          baseVersionId,
+          {
+            id: versionId,
+            storageKey,
+            sizeBytes: stored.sizeBytes,
+            sha256: stored.checksumSha256,
+            source: "LIVE_SNAPSHOT",
+            createdById: null,
+            contributorIds,
+          },
+          now,
+        );
+        return { versionId, number, sizeBytes: stored.sizeBytes, savedAt: toIsoInstant(now) };
+      } catch (error) {
+        if (error instanceof StaleBaseVersionError || isUniqueViolation(error)) {
+          throw new AppError("WORKBOOK_CHANGED", { logContext: { workbookId, baseVersionId } });
+        }
+        throw error;
+      }
+    },
+
+    /**
      * Deletes stored files that no version row refers to and that are older than the grace period
      * (failed or refused saves). Never deletes a referenced file (X-JOB-05). Returns how many.
      */

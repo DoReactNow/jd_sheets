@@ -5,7 +5,7 @@ import { APP_CONFIG } from "@/shared/config/appConfig";
 import { AppError } from "@/shared/errors/AppError";
 import type { Principal } from "@/shared/rbac/principal";
 import { roleAllows, type WorkbookRole } from "@/shared/rbac/workbookAccess";
-import { systemClock, toIsoInstant, type Clock } from "@/shared/time";
+import { plusDuration, systemClock, toIsoInstant, type Clock } from "@/shared/time";
 import { leaseRepository } from "./workbooks.repository";
 
 export type LeaseState =
@@ -15,7 +15,6 @@ export type LeaseState =
   | { status: "VIEW_ONLY" };
 
 export function createLeaseService({ clock = systemClock }: { clock?: Clock } = {}) {
-  const ttlMs = APP_CONFIG.lease.ttlSeconds * 1000;
 
   async function whoHolds(principal: Principal, workbookId: string): Promise<LeaseState | null> {
     const current = await leaseRepository.current(workbookId, clock.now());
@@ -43,7 +42,7 @@ export function createLeaseService({ clock = systemClock }: { clock?: Clock } = 
       if (!principal.sessionId) throw new AppError("UNAUTHENTICATED");
       for (let attempt = 0; attempt < 2; attempt++) {
         const now = clock.now();
-        const expiresAt = new Date(now.getTime() + ttlMs);
+        const expiresAt = plusDuration(now, { seconds: APP_CONFIG.lease.ttlSeconds });
         const held = await leaseRepository.take({
           workbookId,
           userId: principal.userId,

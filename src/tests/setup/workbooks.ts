@@ -1,3 +1,4 @@
+import { plusDuration, systemClock } from "@/shared/time";
 // Workbook helpers for integration tests that go through the real routes with a session cookie.
 import { POST as createRoute } from "@/app/api/workbooks/route";
 import { call } from "./session";
@@ -34,7 +35,7 @@ export async function holdLease(
   const { getPrisma } = await import("@/shared/db/prisma");
   const { randomBytes } = await import("node:crypto");
   const prisma = getPrisma();
-  const far = new Date(Date.now() + 3_600_000);
+  const far = plusDuration(systemClock.now(), { hours: 1 });
   const session = await prisma.session.create({
     data: {
       userId,
@@ -56,7 +57,7 @@ export async function principalWithSession<T extends { id: string; principal: ob
 ): Promise<T["principal"] & { sessionId: string }> {
   const { getPrisma } = await import("@/shared/db/prisma");
   const { randomBytes } = await import("node:crypto");
-  const far = new Date(Date.now() + 3_600_000);
+  const far = plusDuration(systemClock.now(), { hours: 1 });
   const session = await getPrisma().session.create({
     data: {
       userId: user.id,

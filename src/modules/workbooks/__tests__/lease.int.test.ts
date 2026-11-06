@@ -139,7 +139,7 @@ describe("taking the lease", () => {
 
 describe("timing (P2-LEASE-03, -05)", () => {
   it("lasts 90 seconds, renews, and expires just after 90 seconds, not before", async () => {
-    const clock = createTestClock(new Date("2026-11-06T10:00:00Z"));
+    const clock = createTestClock("2026-11-06T10:00:00Z");
     const service = createLeaseService({ clock });
     const first = await principalWithSession(owner);
     const second = await principalWithSession(asha);

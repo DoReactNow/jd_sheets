@@ -205,10 +205,10 @@ describe("example env files", () => {
         : /SMTP_USER|MAIL_FROM/.test(name)
           ? "sender@example.com"
           : name === "APP_URL"
-          ? "https://sheets.example.com"
-          : name === "DATABASE_URL"
-            ? "postgresql://user:pass@db:5432/jdsheets"
-            : "replaced-value";
+            ? "https://sheets.example.com"
+            : name === "DATABASE_URL"
+              ? "postgresql://user:pass@db:5432/jdsheets"
+              : "replaced-value";
     }
     expect(parseEnv(source).APP_ENV).toBe("production");
   });

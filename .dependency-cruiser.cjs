@@ -120,7 +120,11 @@ module.exports = {
       comment: "Rule 8: only src/shared/mail/registry.ts imports a mail driver.",
       severity: "error",
       from: {
-        pathNot: ["^src/shared/mail/registry\\.ts$", "^src/shared/mail/drivers/"],
+        pathNot: [
+          "^src/shared/mail/registry\\.ts$",
+          "^src/shared/mail/drivers/",
+          "^src/shared/mail/__tests__/",
+        ],
       },
       to: { path: "^src/shared/mail/drivers/" },
     },

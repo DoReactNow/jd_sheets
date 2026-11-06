@@ -1,16 +1,31 @@
-# Production on the Hostinger VPS (Decisions 34, 37). Run from the repository root:
-#   docker compose --env-file .env.production -f docker/docker-compose.prod.yml up -d --build
-# Only Caddy publishes ports. Containers reach each other by service name.
+# Production on the shared Hostinger VPS (Decisions 34, 61, 62). Installed in /opt/jdsheets by
+# ops/deploy.sh, which runs:
+#   docker compose run --rm migrator, then up -d --wait (never by hand: use ops/deploy.sh)
+# Images are built by GitHub Actions and pulled by tag (JDSHEETS_TAG); the server never builds.
+# Nothing here publishes a port: the server's Traefik (network root_default) is the front door and
+# sends sheets.jdfusion.in to Caddy. Caddy is the only container on that network.
 name: jdsheets
 
+x-logging: &logging
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "5" }
+
 x-app-env: &app-env
-  env_file: ../.env.production
+  env_file: ./.env.production
   restart: unless-stopped
+  <<: *logging
+  networks: [internal]
 
 services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
+    <<: *logging
+    networks: [internal]
+    mem_limit: 384m
+    shm_size: 128m
+    command: ["postgres", "-c", "shared_buffers=96MB", "-c", "max_connections=40"]
     environment:
       POSTGRES_USER: jdsheets
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}
@@ -19,63 +34,92 @@ services:
       - db-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U jdsheets -d jdsheets"]
-      interval: 5s
+      interval: 10s
       timeout: 3s
       retries: 20
 
   migrator:
     <<: *app-env
+    image: ${JDSHEETS_REGISTRY:-ghcr.io/doreactnow/jd_sheets}/migrator:${JDSHEETS_TAG:?set JDSHEETS_TAG}
     restart: "no"
-    build: { context: .., dockerfile: docker/Dockerfile, target: migrator }
+    # Run only by ops/deploy.sh (`run --rm migrator`) before the new version starts, so a failed
+    # migration never stops the running version (P4-DEPLOY-01). Also runs the admin commands.
+    profiles: ["migrate"]
+    mem_limit: 256m
     depends_on:
       db: { condition: service_healthy }
 
   collab:
     <<: *app-env
-    build: { context: .., dockerfile: docker/Dockerfile, target: collab }
+    image: ${JDSHEETS_REGISTRY:-ghcr.io/doreactnow/jd_sheets}/collab:${JDSHEETS_TAG:?set JDSHEETS_TAG}
     read_only: true
-    mem_limit: 6g
+    mem_limit: 768m
+    depends_on:
+      db: { condition: service_healthy }
 
   app:
     <<: *app-env
-    build: { context: .., dockerfile: docker/Dockerfile, target: app }
+    image: ${JDSHEETS_REGISTRY:-ghcr.io/doreactnow/jd_sheets}/app:${JDSHEETS_TAG:?set JDSHEETS_TAG}
     read_only: true
+    mem_limit: 640m
     tmpfs:
       - /app/.next/cache
       - /tmp
     volumes:
       - workbooks:/data/workbooks
     depends_on:
-      migrator: { condition: service_completed_successfully }
+      db: { condition: service_healthy }
       collab: { condition: service_healthy }
 
   worker:
     <<: *app-env
-    build: { context: .., dockerfile: docker/Dockerfile, target: worker }
+    image: ${JDSHEETS_REGISTRY:-ghcr.io/doreactnow/jd_sheets}/worker:${JDSHEETS_TAG:?set JDSHEETS_TAG}
     read_only: true
+    mem_limit: 192m
     tmpfs:
       - /tmp
     volumes:
       - workbooks:/data/workbooks
     depends_on:
-      migrator: { condition: service_completed_successfully }
+      db: { condition: service_healthy }
 
   caddy:
     image: caddy:2.10-alpine
     restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
+    <<: *logging
+    read_only: true
+    mem_limit: 64m
+    networks: [internal, edge]
     environment:
-      SITE_ADDRESS: ${SITE_ADDRESS:?set SITE_ADDRESS (the domain) in .env.production}
-      EDGE_ALLOWED_CIDRS: ${EDGE_ALLOWED_CIDRS:?set EDGE_ALLOWED_CIDRS in .env.production}
+      SITE_ADDRESS: ":80"
+      EDGE_ALLOWED_CIDRS: ${EDGE_ALLOWED_CIDRS:-0.0.0.0/0 ::/0}
+      EDGE_TRUSTED_PROXIES: ${EDGE_TRUSTED_PROXIES:?set EDGE_TRUSTED_PROXIES (the Traefik network range)}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./blocked:/srv/blocked:ro
       - caddy-data:/data
       - caddy-config:/config
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: ${TRAEFIK_NETWORK:-root_default}
+      traefik.http.routers.jdsheets.rule: Host(`${SITE_DOMAIN:?set SITE_DOMAIN}`)
+      traefik.http.routers.jdsheets.entrypoints: websecure
+      traefik.http.routers.jdsheets.tls: "true"
+      traefik.http.routers.jdsheets.tls.certresolver: ${TRAEFIK_CERT_RESOLVER:-mytlschallenge}
+      traefik.http.services.jdsheets.loadbalancer.server.port: "80"
     depends_on:
       app: { condition: service_healthy }
+
+networks:
+  internal: {}
+  edge:
+    external: true
+    name: ${TRAEFIK_NETWORK:-root_default}
 
 volumes:
   db-data:

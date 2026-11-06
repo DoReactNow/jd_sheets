@@ -1,8 +1,16 @@
 # The edge (Decisions 18, 34). Locally: plain http on :47324. In production: {$SITE_ADDRESS} is
-# the domain, and Caddy gets HTTPS certificates by itself.
+# ":80" behind the server's Traefik, which handles HTTPS (Decision 62).
+{
+	servers {
+		# Only these may set X-Forwarded-For: in production the Traefik network, so the client
+		# address Traefik saw is kept and Caddy appends Traefik's (TRUSTED_PROXY_HOPS=2).
+		trusted_proxies static {$EDGE_TRUSTED_PROXIES:127.0.0.1/32}
+	}
+}
+
 {$SITE_ADDRESS::80} {
 	# Layer 1 of the IP allowlist: everyone outside these ranges sees a static page (403).
-	@outside not remote_ip {$EDGE_ALLOWED_CIDRS:0.0.0.0/0 ::/0}
+	@outside not client_ip {$EDGE_ALLOWED_CIDRS:0.0.0.0/0 ::/0}
 	handle @outside {
 		root * /srv/blocked
 		rewrite * /index.html

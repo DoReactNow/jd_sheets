@@ -3,6 +3,8 @@
 #   app       the Next.js app (standalone output) with the built GridCraft editor in public/editor
 #   worker    background jobs (node dist/worker.js)
 #   collab    the Rust engine and collaboration service
+#   ops       the files the server needs (compose file, Caddyfile, blocked page, ops scripts),
+#             unpacked by ops/install.sh, so the server needs no copy of the repository
 # Runtime images contain no compilers and run as a non-root user (P0-DOCKER-02).
 # Keep NODE_VERSION in step with .nvmrc and RUST_VERSION with services/collab/rust-toolchain.toml.
 ARG NODE_VERSION=22
@@ -62,8 +64,11 @@ RUN npm run db:generate && npm run build && npm run build:worker
 
 FROM base-openssl AS migrator
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json prisma.config.ts ./
+COPY package.json prisma.config.ts tsconfig.json ./
 COPY prisma ./prisma
+# Source for the one-off commands run with tsx: db:sync-rbac, the private seed, and the recovery
+# commands (ops/admin.sh). The generated Prisma client comes from the builder.
+COPY --from=builder /app/src ./src
 USER node
 CMD ["npx", "prisma", "migrate", "deploy"]
 
@@ -89,6 +94,9 @@ COPY --from=builder /app/src/generated ./src/generated
 COPY package.json ./
 RUN mkdir -p /data/workbooks && chown node:node /data/workbooks
 USER node
+# The worker touches this file with every heartbeat (src/worker/heartbeat.ts).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=4 \
+  CMD ["sh", "-c", "find /tmp/jdsheets-worker-alive -mmin -2 | grep -q ."]
 CMD ["node", "dist/worker.js"]
 
 FROM debian:bookworm-slim AS collab
@@ -99,3 +107,12 @@ EXPOSE 47321
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=5 \
   CMD ["/usr/local/bin/jd-collab", "--healthcheck"]
 CMD ["/usr/local/bin/jd-collab"]
+
+FROM alpine:3.22 AS ops
+COPY docker/docker-compose.prod.yml /bundle/docker-compose.prod.yml
+COPY docker/Caddyfile /bundle/Caddyfile
+COPY docker/blocked /bundle/blocked
+COPY ops /bundle/ops
+COPY .env.production.example /bundle/.env.production.example
+RUN chmod 755 /bundle/ops/*.sh
+CMD ["tar", "-C", "/bundle", "-cf", "-", "."]

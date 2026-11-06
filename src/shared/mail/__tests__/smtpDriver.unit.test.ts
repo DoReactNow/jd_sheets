@@ -65,7 +65,9 @@ describe("smtp driver (P4-MAIL-01, -02)", () => {
   it("sends from MAIL_FROM", async () => {
     const to = `from-${(seq += 1)}@jdfusion.in`;
     await createSmtpMailer(settings()).send({ to, subject: "s", text: "t" });
-    expect(received.find((m) => m.to === to)?.from).toMatch(new RegExp(`^"?JD Sheets"? <${USER}>$`));
+    expect(received.find((m) => m.to === to)?.from).toMatch(
+      new RegExp(`^"?JD Sheets"? <${USER}>$`),
+    );
   });
 
   it("accepts the app password as Google shows it, in groups with spaces", async () => {

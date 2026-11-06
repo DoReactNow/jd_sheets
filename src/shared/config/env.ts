@@ -74,7 +74,13 @@ const baseSchema = z.object({
   MAIL_FROM: z.string().includes("@", { error: "MAIL_FROM must hold an email address" }).optional(),
 });
 
-const SMTP_REQUIRED = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "MAIL_FROM"] as const;
+const SMTP_REQUIRED = [
+  "SMTP_HOST",
+  "SMTP_PORT",
+  "SMTP_USER",
+  "SMTP_PASSWORD",
+  "MAIL_FROM",
+] as const;
 
 const S3_REQUIRED = [
   "STORAGE_S3_ENDPOINT",

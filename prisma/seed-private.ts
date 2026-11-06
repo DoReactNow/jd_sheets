@@ -4,7 +4,6 @@
 import { getPrisma } from "../src/shared/db/prisma";
 import { runPrivateSeed } from "./seed-private-lib";
 
- 
 runPrivateSeed(process.env.SEED_SUPER_ADMIN_EMAIL, process.env.SEED_SUPER_ADMIN_PASSWORD)
   .then((message) => console.log(`[seed] ${message}`))
   .catch((error: unknown) => {

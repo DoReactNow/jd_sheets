@@ -37,7 +37,7 @@ export async function runTestSeed(): Promise<void> {
   }
   const prisma = getPrisma();
   await syncRbac();
-   
+
   const password = process.env.TEST_USER_PASSWORD;
   if (!password) throw new Error("TEST_USER_PASSWORD is missing from .env.test");
   const passwordHash = await hashPassword(password);

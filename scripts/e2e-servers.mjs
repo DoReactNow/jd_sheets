@@ -8,13 +8,24 @@ import path from "node:path";
 import dotenv from "dotenv";
 import { ROOT } from "./lib/toolchain.mjs";
 
-const env = dotenv.config({ path: path.join(ROOT, ".env.test"), processEnv: {}, quiet: true }).parsed ?? {};
+const env =
+  dotenv.config({ path: path.join(ROOT, ".env.test"), processEnv: {}, quiet: true }).parsed ?? {};
 const dir = path.join(ROOT, "test-results", "e2e-servers");
 const pidFile = path.join(dir, "pids.json");
 
 const SERVERS = [
-  { name: "collab", command: ["npm", "run", "collab:test-start"], health: `${env.COLLAB_URL}/health`, extra: {} },
-  { name: "worker", command: ["npm", "run", "worker:test-start"], health: null, extra: { LOG_LEVEL: "info" } },
+  {
+    name: "collab",
+    command: ["npm", "run", "collab:test-start"],
+    health: `${env.COLLAB_URL}/health`,
+    extra: {},
+  },
+  {
+    name: "worker",
+    command: ["npm", "run", "worker:test-start"],
+    health: null,
+    extra: { LOG_LEVEL: "info" },
+  },
   {
     name: "app",
     command: ["npm", "run", "start:test"],
@@ -57,7 +68,8 @@ async function start() {
     child.unref();
     pids[server.name] = child.pid;
     console.log(`[e2e] started ${server.name}`);
-    if (server.health) await waitFor(server.name, server.health, server.name === "collab" ? 600 : 60);
+    if (server.health)
+      await waitFor(server.name, server.health, server.name === "collab" ? 600 : 60);
   }
   writeFileSync(pidFile, JSON.stringify(pids));
   console.log("[e2e] servers ready");

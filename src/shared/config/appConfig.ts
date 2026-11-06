@@ -57,6 +57,33 @@ export const APP_CONFIG = deepFreeze({
     /** Messages larger than this are ignored by the bridge (P0-BRIDGE-07). */
     maxMessageBytes: 64 * MIB,
   },
+  auth: {
+    /** Sessions (Decision 14). */
+    sessionIdleHours: 12,
+    sessionMaxDays: 7,
+    sessionExtendEveryMinutes: 5,
+    /** Lockout and sign-in throttling. */
+    lockAfterFailures: 5,
+    lockMinutes: 15,
+    signInAttemptsPerIp: 20,
+    signInWindowMinutes: 15,
+  },
+  otp: {
+    /** Sign-up codes (Decision 13). */
+    digits: 6,
+    validMinutes: 10,
+    maxAttempts: 5,
+    resendAfterSeconds: 60,
+    perEmailPerHour: 5,
+    perIpPerHour: 20,
+    /** After a correct code, the person has this long to finish sign-up. */
+    ticketMinutes: 15,
+  },
+  network: {
+    /** How long the IP rules are cached in each process (Decision 46). */
+    cacheSeconds: 5,
+    blockedRequestDays: 90,
+  },
   ports: {
     app: 47320,
     collab: 47321,

@@ -14,12 +14,13 @@ import { configureWorkbookRoleResolver } from "@/shared/rbac/workbookAccess";
 import { getFileStorage } from "@/shared/storage";
 import { minimalXlsx } from "@/shared/validator";
 import { callRoute } from "@/tests/setup/callRoute";
-import { actAs, stopActing, testPrincipal } from "@/tests/setup/principals";
-import { resetDatabase } from "@/tests/setup/resetDatabase";
+import { actAs, createTestUser, resetWithRoles, stopActing } from "@/tests/setup/users";
 import { resetTestStorage } from "@/tests/setup/testStorage";
 
-const asha = testPrincipal("MEMBER");
-const ravi = testPrincipal("MEMBER");
+import type { Principal } from "@/shared/rbac/principal";
+
+let asha: Principal;
+let ravi: Principal;
 
 interface Wb {
   id: string;
@@ -65,8 +66,10 @@ beforeAll(() => {
   configureWorkbookRoleResolver(resolveWorkbookRoleForOwner);
 });
 beforeEach(async () => {
-  await resetDatabase();
+  await resetWithRoles();
   resetTestStorage();
+  asha = (await createTestUser({ role: "MEMBER", displayName: "Asha" })).principal;
+  ravi = (await createTestUser({ role: "MEMBER", displayName: "Ravi" })).principal;
   actAs(asha);
 });
 afterEach(() => stopActing());

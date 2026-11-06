@@ -21,7 +21,7 @@ export function stubEnvFor(appEnv: StubAppEnv, overrides: Record<string, string>
     STORAGE_LOCAL_DIR: "./storage/test",
     NETWORK_ENFORCEMENT: production ? "on" : "off",
     MAIL_DRIVER: production ? "smtp" : "fake",
-    DEV_PRINCIPAL: "off",
+    AUTH_SECRET: production ? "c".repeat(48) : "test-only-auth-secret-0123456789abcdef0123",
     ...overrides,
   };
   for (const [name, value] of Object.entries(values)) vi.stubEnv(name, value);

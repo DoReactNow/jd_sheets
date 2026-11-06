@@ -49,6 +49,7 @@ module.exports = {
         pathNot: [
           "\\.repository\\.ts$",
           "^src/shared/db/",
+          "^src/shared/mail/drivers/",
           "^src/generated/",
           "^prisma/",
           "^scripts/",
@@ -113,6 +114,15 @@ module.exports = {
         ],
       },
       to: { path: "^src/shared/storage/drivers/" },
+    },
+    {
+      name: "mail-driver-outside-registry",
+      comment: "Rule 8: only src/shared/mail/registry.ts imports a mail driver.",
+      severity: "error",
+      from: {
+        pathNot: ["^src/shared/mail/registry\\.ts$", "^src/shared/mail/drivers/"],
+      },
+      to: { path: "^src/shared/mail/drivers/" },
     },
     {
       name: "pg-boss-outside-jobs",

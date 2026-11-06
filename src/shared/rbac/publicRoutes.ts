@@ -3,6 +3,13 @@
 // enforces this list.
 export const PUBLIC_ROUTES = [
   "/api/health",
-  // Test-only: answers 404 unless APP_ENV=test.
+  "/api/auth/sign-in",
+  // Public so that repeating it, or an expired session, succeeds quietly.
+  "/api/auth/sign-out",
+  "/api/auth/sign-up/request",
+  "/api/auth/sign-up/verify",
+  "/api/auth/sign-up/complete",
+  // Test-only: answer 404 unless APP_ENV=test.
   "/api/test-support/fail",
+  "/api/test-support/mail",
 ] as const;

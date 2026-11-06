@@ -11,6 +11,27 @@ export const ERROR_CATALOG = {
     message: "Some details need fixing. Please check the highlighted fields.",
   },
   UNAUTHENTICATED: { status: 401, message: "Please sign in to continue." },
+  INVALID_CREDENTIALS: {
+    status: 401,
+    message: "That email and password don't match. Check for typos and try again.",
+  },
+  ACCOUNT_PENDING: {
+    status: 403,
+    message: "Your account is waiting for an admin to approve it. Please try again later.",
+  },
+  ACCOUNT_REJECTED: {
+    status: 403,
+    message:
+      "Your request for an account was not approved. Contact your admin if you think this is wrong.",
+  },
+  PASSWORD_CHANGE_REQUIRED: {
+    status: 403,
+    message: "Please choose a new password before you continue.",
+  },
+  NETWORK_BLOCKED: {
+    status: 403,
+    message: "This isn't available from this network. Connect to the office network or VPN.",
+  },
   FORBIDDEN: { status: 403, message: "You don't have access to do this." },
   NOT_FOUND: { status: 404, message: "We couldn't find what you were looking for." },
   CONFLICT: {
@@ -21,6 +42,11 @@ export const ERROR_CATALOG = {
     status: 409,
     message:
       "This workbook was changed since you opened it. Reload the latest version or save yours as a copy.",
+  },
+  OTP_INVALID: { status: 400, message: "That code isn't right. Check it and try again." },
+  OTP_EXPIRED: {
+    status: 400,
+    message: "That code has expired or was used too many times. Ask for a new code.",
   },
   REQUEST_TOO_LARGE: { status: 413, message: "That request is too large." },
   WORKBOOK_TOO_LARGE: {

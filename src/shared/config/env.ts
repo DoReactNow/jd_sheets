@@ -34,8 +34,10 @@ const baseSchema = z.object({
       "DATABASE_URL must be a postgresql:// URL with a database name",
     ),
   DATABASE_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),
-  /** Phase 0 only: every request runs as the development principal (Decision 35). */
-  DEV_PRINCIPAL: onOff("DEV_PRINCIPAL"),
+  /** Keys OTP hashes, sign-up tickets and rate-limit buckets (Decision 48). */
+  AUTH_SECRET: secret("AUTH_SECRET"),
+  /** Comma-separated ranges written as the first IP rules on an empty table (Decision 18). */
+  BOOTSTRAP_ALLOWED_CIDRS: z.string().default(""),
   /** The app's IP rules (Decision 18). Required "on" in production. */
   NETWORK_ENFORCEMENT: onOff("NETWORK_ENFORCEMENT"),
   /** Proxies in front of the app that append to X-Forwarded-For. */
@@ -80,9 +82,6 @@ const envSchema = baseSchema.superRefine((env, ctx) => {
       if (!env[name]) issue(name, `${name} is required when STORAGE_DRIVER=s3`);
     }
   }
-  if (env.DEV_PRINCIPAL === "on" && env.APP_ENV === "production") {
-    issue("DEV_PRINCIPAL", "DEV_PRINCIPAL=on is not allowed in production");
-  }
   if (env.APP_ENV === "production") {
     for (const [name, value] of Object.entries(env)) {
       if (typeof value === "string" && value.startsWith("<")) {
@@ -92,7 +91,7 @@ const envSchema = baseSchema.superRefine((env, ctx) => {
     if (!env.APP_URL.startsWith("https://")) {
       issue("APP_URL", "APP_URL must start with https:// in production");
     }
-    for (const name of ["COLLAB_TOKEN_SECRET", "INTERNAL_SERVICE_TOKEN"] as const) {
+    for (const name of ["COLLAB_TOKEN_SECRET", "INTERNAL_SERVICE_TOKEN", "AUTH_SECRET"] as const) {
       if (isPlaceholder(env[name])) {
         issue(name, `${name} is a development placeholder; generate a real secret`);
       }

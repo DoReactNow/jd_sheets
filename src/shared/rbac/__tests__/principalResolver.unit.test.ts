@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { fakePrincipal } from "@/tests/setup/fakePrincipal";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -16,19 +17,14 @@ function stubEnv(appEnv: "test" | "development") {
   vi.stubEnv("COLLAB_URL", "http://127.0.0.1:47321");
   vi.stubEnv("COLLAB_TOKEN_SECRET", "x".repeat(40));
   vi.stubEnv("INTERNAL_SERVICE_TOKEN", "y".repeat(40));
+  vi.stubEnv("AUTH_SECRET", "z".repeat(40));
   vi.stubEnv("WORKBOOK_VALIDATOR", "fake");
   vi.stubEnv("STORAGE_DRIVER", "local");
   vi.stubEnv("STORAGE_LOCAL_DIR", "./storage/test");
 }
 
 const request = new Request("http://127.0.0.1/api/x");
-const fake = (role: string) => ({
-  userId: "u",
-  displayName: "U",
-  roleCode: role,
-  bypassesAccess: false,
-  permissions: new Set<never>(),
-});
+const fake = (role: string) => fakePrincipal({ roleCode: role });
 
 describe("principal resolver", () => {
   it("resolves no principal when nothing is configured", async () => {
@@ -58,30 +54,5 @@ describe("principal resolver", () => {
     stubEnv("development");
     const { setPrincipalResolverForTests } = await import("../principalResolver");
     expect(() => setPrincipalResolverForTests(async () => null)).toThrow(/APP_ENV=test/);
-  });
-});
-
-describe("development principal (P0-ACC-01)", () => {
-  it("is available in development and test with DEV_PRINCIPAL=on", async () => {
-    stubEnv("development");
-    vi.stubEnv("DEV_PRINCIPAL", "on");
-    const { createDevPrincipalResolver, DEV_PRINCIPAL } = await import("../devPrincipal");
-    await expect(createDevPrincipalResolver()(request)).resolves.toBe(DEV_PRINCIPAL);
-  });
-
-  it("is refused without DEV_PRINCIPAL=on", async () => {
-    stubEnv("development");
-    vi.stubEnv("DEV_PRINCIPAL", "off");
-    const { createDevPrincipalResolver } = await import("../devPrincipal");
-    expect(() => createDevPrincipalResolver()).toThrow(/DEV_PRINCIPAL=on/);
-  });
-
-  it("cannot even be configured in production", async () => {
-    stubEnv("development");
-    vi.stubEnv("APP_ENV", "production");
-    vi.stubEnv("APP_URL", "https://sheets.example.com");
-    vi.stubEnv("DEV_PRINCIPAL", "on");
-    const { createDevPrincipalResolver } = await import("../devPrincipal");
-    expect(() => createDevPrincipalResolver()).toThrow(/DEV_PRINCIPAL/);
   });
 });

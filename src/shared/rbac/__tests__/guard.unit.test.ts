@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { fakePrincipal } from "@/tests/setup/fakePrincipal";
 import { AppError } from "@/shared/errors/AppError";
 import { assertCan } from "../assertCan";
 import { can, checkAccess, type Access } from "../guard";
@@ -6,13 +7,11 @@ import { PERMISSION_CODES, type PermissionCode } from "../permissionRegistry";
 import type { Principal } from "../principal";
 
 function principal(permissions: PermissionCode[], bypassesAccess = false): Principal {
-  return {
-    userId: "00000000-0000-4000-8000-000000000001",
-    displayName: "Someone",
+  return fakePrincipal({
     roleCode: bypassesAccess ? "SUPER_ADMIN" : "CUSTOM",
     bypassesAccess,
     permissions: new Set(permissions),
-  };
+  });
 }
 
 const diag = "system:diagnostics" satisfies PermissionCode;

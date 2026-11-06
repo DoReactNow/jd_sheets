@@ -116,3 +116,61 @@ async fn unknown_paths_get_the_not_found_envelope() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(json(&body)["error"]["code"], "NOT_FOUND");
 }
+
+fn golden(name: &str) -> Vec<u8> {
+    std::fs::read(format!("{}/../../golden/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap_or_default()
+}
+
+fn diff_request(base: &[u8], new: &[u8], author: &str, token: Option<&str>) -> Request<Body> {
+    let mut body = base.to_vec();
+    body.extend_from_slice(new);
+    let mut builder = Request::post(format!("/internal/workbooks/diff-kind?author={author}"))
+        .header("x-base-length", base.len().to_string());
+    if let Some(token) = token {
+        builder = builder.header("x-internal-token", token);
+    }
+    builder.body(Body::from(body)).unwrap_or_default()
+}
+
+#[tokio::test]
+async fn diff_kind_answers_the_kind_of_change() {
+    let base = golden("comments.xlsx");
+    let (status, body) = send(diff_request(&base, &base, "Asha%20Rao", Some(TOKEN))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(json(&body)["data"]["kind"], "NONE");
+    let other = golden("basics.xlsx");
+    let (_, body) = send(diff_request(&base, &other, "Asha", Some(TOKEN))).await;
+    assert_eq!(json(&body)["data"]["kind"], "OTHER");
+}
+
+#[tokio::test]
+async fn diff_kind_needs_the_token_an_author_and_two_workbooks() {
+    let base = golden("comments.xlsx");
+    let (status, _) = send(diff_request(&base, &base, "Asha", None)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let (status, _) = send(diff_request(&base, &base, "", Some(TOKEN))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, body) = send(diff_request(&base, b"not a workbook", "Asha", Some(TOKEN))).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(json(&body)["error"]["code"], "WORKBOOK_UNREADABLE");
+}
+
+#[tokio::test]
+async fn convert_turns_an_import_into_xlsx() {
+    let (status, bytes) = send(internal(
+        "/internal/workbooks/convert?ext=csv",
+        b"a,b\n1,2\n".to_vec(),
+        Some(TOKEN),
+    ))
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(bytes.starts_with(b"PK"));
+    let (status, body) = send(internal(
+        "/internal/workbooks/convert?ext=exe",
+        b"MZ".to_vec(),
+        Some(TOKEN),
+    ))
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(json(&body)["error"]["code"], "WORKBOOK_UNREADABLE");
+}

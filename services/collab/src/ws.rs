@@ -48,10 +48,13 @@ pub async fn upgrade(
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> Response {
+    // As the app reads it (Decision 50): with no proxy in front (local runs), the socket address
+    // stands in for the entry the nearest proxy would have added. Production always has Caddy.
     let forwarded = headers
         .get("x-forwarded-for")
         .and_then(|v| v.to_str().ok())
-        .map(str::to_string);
+        .map(str::to_string)
+        .or_else(|| Some(addr.ip().to_string()));
     let ip = client_ip(forwarded.as_deref(), Some(addr.ip()), state.config.trusted_proxy_hops);
     ws.max_message_size(MAX_MESSAGE_BYTES)
         .on_upgrade(move |socket| serve(state, workbook_id, ip, socket))
@@ -250,6 +253,20 @@ async fn serve(state: AppState, workbook_id: String, ip: Option<std::net::IpAddr
                         let _ = tx.send(Out::Binary(bytes));
                     }
                     Some("ping") => { let _ = tx.send(Out::Text(json!({ "type": "pong" }).to_string())); }
+                    Some("snapshot") => {
+                        // "Save a version now" (Ctrl/Cmd+S while live), for editors.
+                        let editor = room.lock().await.conns.get(&conn_id).is_some_and(|c| c.role == Role::Editor);
+                        if editor {
+                            let rooms = state.rooms.clone();
+                            let room = room.clone();
+                            let tx = tx.clone();
+                            tokio::spawn(async move {
+                                rooms.snapshot(&room).await;
+                                let saved = !room.lock().await.dirty;
+                                let _ = tx.send(Out::Text(json!({ "type": "saved", "ok": saved }).to_string()));
+                            });
+                        }
+                    }
                     _ => { close_now(close::PROTOCOL, "unexpected"); break; }
                 }
             }

@@ -396,6 +396,7 @@ export function EditorHost({
       onCommand: (id, baseSeq, step) => liveRef.current?.sendCommand(id, baseSeq, step),
       onResyncNeeded: () => liveRef.current?.requestResync(),
       onSelection: (sheetName, range) => liveRef.current?.sendSelection(sheetName, range),
+      onLiveSave: () => liveRef.current?.requestSnapshot(),
       onSaved: (outcome) => {
         sessionRef.current?.saveFinished(outcome.ok);
         if (
@@ -541,13 +542,15 @@ export function EditorHost({
             data-status={live.status === "live" ? "saved" : "unsaved"}
             role="status"
             aria-live="polite"
-            data-testid="live-status"
+            data-testid={mode === "edit" ? "live-status" : "editor-mode"}
           >
-            {live.status === "live"
-              ? mode === "edit"
-                ? "Live · saved"
-                : MODE_TEXT[mode]
-              : "Reconnecting…"}
+            {live.status !== "live"
+              ? "Reconnecting…"
+              : mode !== "edit"
+                ? MODE_TEXT[mode]
+                : live.saving
+                  ? "Saving a version…"
+                  : "Live"}
           </span>
         ) : mode === "edit" ? (
           <span

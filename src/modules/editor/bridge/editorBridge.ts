@@ -82,6 +82,8 @@ export interface BridgeDeps {
   onResyncNeeded?: () => void;
   /** Live editing: where this person is, for presence. */
   onSelection?: (sheetName: string, range: string) => void;
+  /** Live editing: the person pressed Save (the server saves a version). */
+  onLiveSave?: () => void;
 }
 
 export interface EditorBridge {
@@ -179,7 +181,11 @@ export function createEditorBridge(deps: BridgeDeps): EditorBridge {
       deps.download(name, bytes);
       return;
     }
-    if (live) return; // live: every change is already stored by the server
+    if (live) {
+      // Live: every change is already stored; Save asks the server for a version now.
+      deps.onLiveSave?.();
+      return;
+    }
     if (state.status === "conflict" || !state.baseVersionId) return;
     if (saving) {
       pending = bytes; // only the newest pending save matters; it runs after the current one

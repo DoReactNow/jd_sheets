@@ -30,6 +30,8 @@ export type TokenResult = TokenAnswer | { ok: false; noAccess: boolean };
 
 export interface LiveState {
   status: "connecting" | "live" | "reconnecting" | "unavailable" | "no-access";
+  /** A "save a version now" is on its way. */
+  saving: boolean;
   role: LiveRole | null;
   /** The workbook already has the most editors (Decision 56): this person views. */
   full: boolean;
@@ -73,12 +75,15 @@ export interface LiveConnection {
   sendCommand(clientCommandId: string, baseSeq: number, step: unknown): void;
   sendSelection(sheetName: string, range: string): void;
   requestResync(): void;
+  /** "Save a version now" (Ctrl/Cmd+S while live). */
+  requestSnapshot(): void;
   state(): LiveState;
 }
 
 export function createLiveConnection(deps: LiveDeps): LiveConnection {
   let state: LiveState = {
     status: "connecting",
+    saving: false,
     role: null,
     full: false,
     heldBy: null,
@@ -189,6 +194,9 @@ export function createLiveConnection(deps: LiveDeps): LiveConnection {
       case "role":
         set({ role: message.role as LiveRole });
         break;
+      case "saved":
+        set({ saving: false });
+        break;
       case "accessChanged":
         // The server closes next; the reconnect fetches a token with the new role (or none).
         break;
@@ -240,6 +248,10 @@ export function createLiveConnection(deps: LiveDeps): LiveConnection {
     sendSelection: (sheetName, range) =>
       send({ type: "presence", selection: { sheetName, range } }),
     requestResync: () => send({ type: "resync" }),
+    requestSnapshot: () => {
+      set({ saving: true });
+      send({ type: "snapshot" });
+    },
     state: () => state,
   };
 }

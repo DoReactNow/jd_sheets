@@ -36,12 +36,16 @@ async function a1(page: Page, id: string): Promise<string | undefined> {
   return cellOf(xml, "A1").value ?? undefined;
 }
 
-async function saveNow(page: Page, id: string) {
-  const saved = page.waitForResponse(
-    (r) => r.url().includes(`/api/workbooks/${id}/content`) && r.request().method() === "PUT",
-  );
+/** Ctrl/Cmd+S saves a version (live: the server saves it); waits until A1 shows `value`. */
+async function saveNow(page: Page, id: string, value: string) {
   await page.keyboard.press(SAVE);
-  expect((await saved).status()).toBe(200);
+  await expect.poll(() => a1(page, id), { timeout: 20_000 }).toBe(value);
+}
+
+async function cellAt(page: Page, id: string, ref: string): Promise<string | undefined> {
+  const response = await page.request.get(`/api/workbooks/${id}/content`);
+  const xml = readZipEntry(Buffer.from(await response.body()), "xl/worksheets/sheet1.xml")!;
+  return cellOf(xml, ref).value ?? undefined;
 }
 
 async function ownerWorkbook(page: Page, value: string): Promise<string> {
@@ -53,9 +57,10 @@ async function ownerWorkbook(page: Page, value: string): Promise<string> {
   await page.waitForURL(/\/w\/[0-9a-f-]{36}$/);
   const id = page.url().split("/").pop()!;
   const frame = await editorReady(page);
-  await expect(page.getByRole("status")).toHaveText("Saved", { timeout: 30_000 });
+  // The live service runs in these journeys: the editor must be live, not on the fallback.
+  await expect(page.getByTestId("live-status")).toHaveText("Live", { timeout: 30_000 });
   await typeA1(page, frame, value);
-  await saveNow(page, id);
+  await saveNow(page, id, value);
   return id;
 }
 
@@ -130,8 +135,7 @@ test("journey 5: restore an older version", async ({ page }) => {
   const id = await ownerWorkbook(page, "444");
   const frame = await editorReady(page);
   await typeA1(page, frame, "555");
-  await saveNow(page, id);
-  expect(await a1(page, id)).toBe("555");
+  await saveNow(page, id, "555");
 
   await page.getByRole("button", { name: "History" }).click();
   const versions = page.getByRole("dialog").getByRole("listitem");
@@ -143,49 +147,51 @@ test("journey 5: restore an older version", async ({ page }) => {
   await versions.nth(1).getByRole("button", { name: "Restore" }).click();
   expect((await restored).status()).toBe(200);
   await page.waitForLoadState("load");
-  await editorReady(page);
-  expect(await a1(page, id)).toBe("444");
+  await expect.poll(() => a1(page, id), { timeout: 20_000 }).toBe("444");
   const history = await (await page.request.get(`/api/workbooks/${id}/versions`)).json();
   expect(history.data.items.map((v: { number: number }) => v.number)).toEqual([4, 3, 2, 1]);
   expect(history.data.items[0]).toMatchObject({ source: "RESTORE", restoredFromNumber: 2 });
 });
 
-test("the edit lease: a second Editor sees who is editing and takes over after they leave", async ({
+test("journey 7: two people edit the same workbook live and end with the same values", async ({
   page,
   browser,
 }) => {
-  const id = await ownerWorkbook(page, "666");
+  const id = await ownerWorkbook(page, "100");
   const other = await asOther(browser);
   await page.request.put(`/api/workbooks/${id}/shares`, {
     data: { target: { type: "user", id: await otherUserId(page) }, role: "EDITOR" },
     headers: { origin: new URL(page.url()).origin },
   });
   await other.page.goto(`/w/${id}`);
-  await expect(other.page.getByText("Test Member is editing")).toBeVisible({ timeout: 30_000 });
-  await expect(other.page.getByTestId("editor-mode")).toHaveText("View only");
-  await editorReady(other.page);
+  const otherFrame = await editorReady(other.page);
+  await expect(other.page.getByTestId("live-status")).toHaveText("Live", { timeout: 30_000 });
+  // Each sees the other in the workbook (P3-PRES-01).
+  await expect(
+    page.getByRole("list", { name: "People in this workbook" }).getByRole("listitem"),
+  ).toHaveCount(2, { timeout: 15_000 });
+  await expect(
+    other.page.getByRole("list", { name: "People in this workbook" }).getByRole("listitem"),
+  ).toHaveCount(2);
 
-  // The first Editor leaves; the lease is released on the way out.
-  await page.getByRole("link", { name: "Back to your workbooks" }).click();
-  await expect(page.getByRole("heading", { name: "Your workbooks" })).toBeVisible();
+  // Both type at the same time, into different cells.
+  const ownerFrame = page.frameLocator('[data-testid="editor-frame"]');
+  await Promise.all([
+    typeA1(page, ownerFrame, "200"),
+    typeCell(other.page, otherFrame, "B1", "300"),
+  ]);
+  await page.keyboard.press(SAVE);
   await expect
-    .poll(
-      async () => {
-        await other.page
-          .getByRole("button", { name: "Refresh" })
-          .click({ timeout: 2_000 })
-          .catch(() => undefined);
-        return other.page
-          .getByRole("status")
-          .filter({ hasText: /^Saved$/ })
-          .count();
-      },
-      { timeout: 30_000 },
-    )
-    .toBe(1);
-  const frame = await editorReady(other.page);
-  await typeA1(other.page, frame, "777");
-  await saveNow(other.page, id);
-  expect(await a1(page, id)).toBe("777");
+    .poll(async () => [await cellAt(page, id, "A1"), await cellAt(page, id, "B1")], {
+      timeout: 20_000,
+    })
+    .toEqual(["200", "300"]);
   await other.context.close();
 });
+
+async function typeCell(page: Page, frame: FrameLocator, ref: "B1", text: string) {
+  await focusA1(page, frame);
+  if (ref === "B1") await page.keyboard.press("ArrowRight", { delay: 60 });
+  await page.keyboard.type(text, { delay: 60 });
+  await page.keyboard.press("Enter", { delay: 60 });
+}

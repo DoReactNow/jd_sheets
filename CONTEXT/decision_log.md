@@ -763,3 +763,30 @@ Because office addresses change, a change can leave everyone outside the allowed
 - **Docker images are built only in Phase 4** (go-live) or in CI, not per phase locally.
 - Rust and editor builds run only when GridCraft or the Rust code changes; background servers are stopped as soon as they are not needed.
 - Progress is shown in the session's task list with a percentage per task.
+
+---
+
+## I. Phase 2 decisions
+
+### Decision 52: Phase 2 Open Questions Answered (TQ-01 to TQ-05)
+
+**Date:** 2026-11-06
+**Status:** Accepted (owner: "Go, as recommended")
+
+#### Decision
+- **Deleting a group with shares (TQ-01, P2-GROUP-03):** the admin sees a warning listing the workbooks the group is shared on; confirming deletes the group and those shares in one transaction, audited. Without the confirmation flag the API answers `GROUP_IN_USE` with the count.
+- **Company link in lists (TQ-02, P2-LINK-03):** a workbook reachable only through the company link appears in "Shared with me" and Recent only after the person has opened the link once (recorded as a link visit). Search follows the same rule.
+- **Ownership transfer (TQ-03, P2-ADMINWB-02):** the old owner keeps a direct **Editor** grant; the new owner can remove it.
+- **Same person, two tabs (TQ-04, P2-LEASE-08):** the lease belongs to one page (a lease id per tab), not to the person. A second tab opens in view mode with "You are editing this in another tab" and a "Move editing here" button, which takes the lease over explicitly; the first tab drops to view mode on its next renewal.
+- **Autosave (TQ-05, P2-SAVE-01):** save 5 seconds after the last change, and at most 30 seconds after the first unsaved change while editing continues. Both values live in the single source of truth.
+
+---
+
+### Decision 53: Patch 0001 Upstream Pull Request Opened by the Owner
+
+**Date:** 2026-11-06
+**Status:** Accepted (owner: "Go, as recommended")
+
+#### Decision
+- Claude writes `patches/gridcraft/0001-access-mode.patch` and the upstream pull request text (`patches/gridcraft/0001-access-mode.upstream.md`). The owner opens the pull request on `storytold/gridcraft` (or tells Claude to open it from `DoReactNow`).
+- Until then the patch header reads `Upstream: pending (see 0001-access-mode.upstream.md)`; the patch check (P2-MODE-01) accepts `pending` only together with that file, and Phase 4 acceptance requires a real link.

@@ -437,3 +437,64 @@ async fn a_restore_resyncs_everyone() {
     assert_eq!(next_of(&mut a, "resync").await["type"], "resync");
     assert!(matches!(next(&mut a).await, Message::Binary(_)));
 }
+
+/// P3-PERF-01: with 20 people editing at once, a change reaches the others within 300 ms at the
+/// 95th percentile (local network; storage is the in-memory fake, so this measures the service).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn twenty_editors_see_changes_within_300_ms() {
+    let (address, _, _) = setup().await;
+    let mut editors = Vec::new();
+    for i in 0..20 {
+        editors.push(join(address, &format!("p{i}"), &format!("P{i}"), "EDITOR").await.0);
+    }
+    // Everyone listens; each change's delay is measured from send to arrival at each other person.
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<(String, std::time::Instant)>();
+    let mut sinks = Vec::new();
+    for (i, ws) in editors.into_iter().enumerate() {
+        let (sink, mut stream) = ws.split();
+        let tx = tx.clone();
+        tokio::spawn(async move {
+            while let Some(Ok(Message::Text(text))) = stream.next().await {
+                let v: Value = serde_json::from_str(text.as_str()).unwrap_or(Value::Null);
+                if v["type"] == "applied" && v["clientCommandId"].is_null() {
+                    let input = v["step"]["params"]["input"].as_str().unwrap_or_default().to_string();
+                    let _ = tx.send((format!("{input}@{i}"), std::time::Instant::now()));
+                }
+            }
+        });
+        sinks.push(sink);
+    }
+    let mut sent_at = HashMap::new();
+    let rounds = 10;
+    for round in 0..rounds {
+        for (i, sink) in sinks.iter_mut().enumerate() {
+            let input = format!("r{round}p{i}");
+            sent_at.insert(input.clone(), std::time::Instant::now());
+            let message = json!({ "type": "command", "clientCommandId": format!("c{round}-{i}"), "baseSeq": 0, "step": step(&format!("A{}", i + 1), &input) });
+            sink.send(Message::Text(message.to_string().into())).await.unwrap();
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    let expected = rounds * 20 * 19;
+    let mut delays = Vec::new();
+    while delays.len() < expected {
+        let Ok(Some((key, at))) = tokio::time::timeout(Duration::from_secs(10), rx.recv()).await else {
+            break;
+        };
+        let input = key.split('@').next().unwrap();
+        if let Some(sent) = sent_at.get(input) {
+            delays.push(at.duration_since(*sent).as_millis());
+        }
+    }
+    assert_eq!(delays.len(), expected, "every change reached every other person");
+    delays.sort_unstable();
+    let p95 = delays[delays.len() * 95 / 100];
+    println!(
+        "P3-PERF-01: {} deliveries, median {} ms, p95 {} ms, max {} ms",
+        delays.len(),
+        delays[delays.len() / 2],
+        p95,
+        delays[delays.len() - 1]
+    );
+    assert!(p95 < 300, "95th percentile {p95} ms");
+}

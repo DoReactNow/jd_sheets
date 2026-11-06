@@ -9,7 +9,7 @@ import { setPrincipalResolverForTests } from "@/shared/rbac/principalResolver";
 import { resetDatabase } from "./resetDatabase";
 
 // The test password, read where tests may read the environment.
- 
+
 export const TEST_PASSWORD = process.env.TEST_USER_PASSWORD ?? "Test-Pass-2027!x";
 
 let passwordHash: Promise<string> | undefined;

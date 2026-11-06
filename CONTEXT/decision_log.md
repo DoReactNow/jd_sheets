@@ -734,3 +734,32 @@ From a fresh clone of the pull-request branch: lint, typecheck, builds, 232 unit
 **Status:** Open (not blocking; decide before go-live)
 
 Because office addresses change, a change can leave everyone outside the allowed ranges until someone with server access runs the recovery command. Options: (a) keep it as is (server command only); (b) let **only Super Admins** sign in from anywhere, every such sign-in audited and shown on the Network page; (c) a one-time emergency code sent to the Super Admin's email. The current build is (a).
+
+---
+
+### Decision 50: Phase 1 Details Settled While Building
+
+**Date:** 2026-11-06
+**Status:** Accepted
+
+#### Decision
+- **Job names follow the module:** the code email job is `identity.sendOtp` (not `mail.sendOtp`), because the worker requires `<module>.<job>` names. The job makes the code itself, claims the hash before sending, and unclaims it if the send fails, so a retry sends a fresh code and a repeat sends nothing.
+- **Pending and rejected people get no session.** The right password answers `ACCOUNT_PENDING` or `ACCOUNT_REJECTED`; the sign-in screen shows the status. A wrong password always answers `INVALID_CREDENTIALS`.
+- **Client address:** Next.js fills `X-Forwarded-For` with the socket address only when no proxy set it, so `TRUSTED_PROXY_HOPS=1` is right both locally and behind Caddy. Without a proxy, a caller could send their own header; production always has Caddy in front.
+- **The production first-run seed is committed** (`prisma/seed-private.ts`, `npm run db:seed:private`): it holds no secrets and reads `SEED_SUPER_ADMIN_EMAIL` and `SEED_SUPER_ADMIN_PASSWORD` from the server's env file. (Amends Decision 28's git-ignored file.)
+- **Development users** (`npm run db:seed:dev`): `owner.dev@`, `admin.dev@`, `asha.dev@`, `rahul.dev@` (all `@jdfusion.in`) with the development-only password printed by the seed.
+- **Pages check the network in the root layout** and show the blocked page; pages needing a person redirect to sign-in, and to change-password when required; a page without the permission redirects to the friendly 403 page.
+
+---
+
+### Decision 51: Lighter Local Workflow
+
+**Date:** 2026-11-06
+**Status:** Accepted (owner: the Mac was heating up; asked what can run at intervals)
+
+#### Decision
+- Locally, a work item runs only the tests of the area it changes; the full suite runs **once per phase**, before the pull request. CI runs everything on every push.
+- The **fresh-clone drill runs in CI only** (CI is a fresh clone).
+- **Docker images are built only in Phase 4** (go-live) or in CI, not per phase locally.
+- Rust and editor builds run only when GridCraft or the Rust code changes; background servers are stopped as soon as they are not needed.
+- Progress is shown in the session's task list with a percentage per task.

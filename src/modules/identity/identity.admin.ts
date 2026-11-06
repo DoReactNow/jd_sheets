@@ -19,19 +19,8 @@ import {
   type UserListFilter,
 } from "./identity.repository";
 
-export interface AdminUserDto {
-  id: string;
-  email: string;
-  displayName: string;
-  status: string;
-  roleKey: string | null;
-  roleName: string | null;
-  signupSource: string;
-  rejectedBefore: boolean;
-  mustChangePassword: boolean;
-  lastSignInAt: string | null;
-  createdAt: string;
-}
+export type { AdminUserDto } from "./identity.types";
+import type { AdminUserDto } from "./identity.types";
 
 const toDto = (row: AdminUserRow): AdminUserDto => ({
   id: row.id,

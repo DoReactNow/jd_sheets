@@ -84,7 +84,16 @@ npm run db:test:prepare
 npm run dev:all
 ```
 
-Then open `http://127.0.0.1:47320`.
+Then open `http://127.0.0.1:47320` and sign in with a development user from `npm run db:seed:dev`:
+
+| Email | Role |
+|:---|:---|
+| `owner.dev@jdfusion.in` | Super Admin |
+| `admin.dev@jdfusion.in` | Admin |
+| `asha.dev@jdfusion.in` | Member (owns the sample workbooks) |
+| `rahul.dev@jdfusion.in` | Member |
+
+All use the development password the seed prints (development only; refused elsewhere). Sign-up codes are not emailed locally: the fake mailer prints them in the app's and the worker's logs (Decision 47).
 
 `dev:all` starts the app, the worker and the Rust service together with labelled output. Separately: `npm run dev`, `npm run worker:dev`, `npm run collab:dev`. (`db:sync-rbac` arrives in Phase 1.)
 
@@ -308,7 +317,7 @@ npm run db:reset:dev
 | `npm run db:sync-rbac` | any | roles and permissions (Phase 1+), idempotent |
 | `npm run db:seed:dev` | development | sample workbooks; development users from Phase 1 |
 | `npm run db:test:prepare` | test | migrate + sync + test seed |
-| `npm run db:seed:private` | production | first Super Admin and bootstrap IP rules (reads `prisma/private/seed.ts`, git-ignored) |
+| `npm run db:seed:private` | production | roles, the first IP rules and the first Super Admin, from `SEED_SUPER_ADMIN_EMAIL` and `SEED_SUPER_ADMIN_PASSWORD` (`prisma/seed-private.ts`) |
 
 Recovery commands (on the server, Phase 1+):
 

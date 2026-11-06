@@ -41,6 +41,14 @@ export async function runTestSeed(): Promise<void> {
   const password = process.env.TEST_USER_PASSWORD;
   if (!password) throw new Error("TEST_USER_PASSWORD is missing from .env.test");
   const passwordHash = await hashPassword(password);
+  // The network rules E2E runs with: only this machine (journey 6 comes from another address).
+  await prisma.ipRule.deleteMany();
+  await prisma.ipRule.createMany({
+    data: [
+      { cidr: "127.0.0.1/32", label: "This machine (IPv4)" },
+      { cidr: "::1/128", label: "This machine (IPv6)" },
+    ],
+  });
   for (const user of TEST_USERS) {
     const role = user.role
       ? await prisma.role.findUniqueOrThrow({ where: { key: user.role } })

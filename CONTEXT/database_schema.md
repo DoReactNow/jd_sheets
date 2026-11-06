@@ -160,7 +160,7 @@ A database trigger refuses deactivating or demoting the last active `SUPER_ADMIN
 |:---|:---|:---|
 | `id` | uuid v7, PK | idempotency key of `mail.sendOtp` |
 | `email` | text | lower-cased; domain constraint |
-| `codeHash` | char(64) | HMAC-SHA-256 with `OTP_PEPPER` |
+| `codeHash` | char(64), nullable | HMAC-SHA-256 with `AUTH_SECRET`; set by the `identity.sendOtp` job (Decision 50) |
 | `attempts` | integer, default 0 | max 5 |
 | `expiresAt` | timestamptz | + 10 minutes |
 | `consumedAt`, `voidedAt` | timestamptz nullable | |
@@ -233,6 +233,17 @@ PK (`bucket`, `windowStart`). Incremented with an atomic upsert.
 | `createdAt` | timestamptz | |
 
 Blocked requests are kept 90 days.
+
+### 3.12a `mail_outbox` (Phase 1, Decision 47)
+
+| Column | Type | Notes |
+|:---|:---|:---|
+| `id` | uuid v7, PK | |
+| `to` | text | |
+| `subject`, `text` | text | |
+| `createdAt` | timestamptz | |
+
+The fake mailer's messages, shared by the app, the worker and the tests. Unused once the SMTP driver is on.
 
 ### 3.13 `audit_events` (Phase 1)
 

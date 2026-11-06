@@ -1,6 +1,8 @@
 // E2E runs a real browser against the BUILT app (`npm run build` and `npm run editor:build` first),
 // served with .env.test, plus the real Rust service (release build). Only the critical journeys of
-// Decision 24 live in e2e/. Phase 0 has no sign-in, so the app runs with the development principal.
+// Decision 24 live in e2e/. People sign in through the real form as the seeded test users; the
+// network rules are on (journey 6). `npm run test:e2e` starts the servers first
+// (scripts/e2e-servers.mjs), and the webServer entries below then reuse them.
 import { defineConfig, devices } from "@playwright/test";
 import { config } from "dotenv";
 
@@ -37,15 +39,17 @@ export default defineConfig({
     {
       command: "npm run collab:test-start",
       url: `${collabURL}/health`,
-      reuseExistingServer: !isCI,
+      reuseExistingServer: true,
       timeout: 600_000,
     },
     {
-      command: "npm run start:test",
+      // The app, plus the worker that sends sign-up code emails (journey 2). The sign-up test waits
+      // for the email itself, so the worker needs no readiness check of its own.
+      command: "npm run worker:test-start & npm run start:test",
       url: `${baseURL}/api/health`,
-      reuseExistingServer: !isCI,
+      reuseExistingServer: true,
       timeout: 120_000,
-      env: { DEV_PRINCIPAL: "on", WORKBOOK_VALIDATOR: "collab" },
+      env: { NETWORK_ENFORCEMENT: "on", WORKBOOK_VALIDATOR: "collab" },
     },
   ],
 });

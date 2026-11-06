@@ -1,6 +1,7 @@
 // Critical journey 3 (P0-E2E-01): create a workbook, type values and a formula, save, reload; the
 // values are there. Checked through the saved file, never by reading the canvas (Rule 18).
 import { expect, test, type Page } from "@playwright/test";
+import { signInAndWait } from "./support/auth";
 import { cellOf, readZipEntry } from "./support/xlsx";
 
 const SAVE = process.platform === "darwin" ? "Meta+s" : "Control+s";
@@ -23,8 +24,7 @@ async function savedSheet(page: Page, workbookId: string): Promise<string> {
 }
 
 test("create, type values and a formula, save, reload", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Your workbooks" })).toBeVisible();
+  await signInAndWait(page, "member.test@jdfusion.in");
   await page
     .getByRole("button", { name: /New workbook|Create your first workbook/ })
     .first()

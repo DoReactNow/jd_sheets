@@ -267,42 +267,64 @@ impl Lcg {
     }
 }
 
-/// A random edit, as a person would make it.
+/// A random edit, as a person would make it, including rows and columns inserted and deleted.
 fn random_edit(r: &mut Lcg, who: usize) -> (&'static str, serde_json::Value) {
     let cell = format!("{}{}", ["A", "B", "C", "D", "E"][r.below(5) as usize], 1 + r.below(8));
-    match r.below(6) {
-        0 => ("cell.set", json!({"cell": cell, "input": format!("v{who}-{}", r.below(100))})),
-        1 => ("cell.set", json!({"cell": cell, "input": format!("={cell}*0+{}", r.below(50))})),
-        2 => ("selection.set", json!({"range": cell})),
-        3 => ("home.bold", json!({})),
-        4 => ("review.newComment", json!({"cell": cell, "text": format!("from {who}"), "author": format!("P{who}")})),
-        _ => (
-            "range.setValues",
-            json!({"range": format!("F{}:G{}", 1 + r.below(5), 1 + r.below(5)).replace(":G", ":G"), "values": [[r.below(9), who]]}),
-        ),
+    match r.below(10) {
+        0 | 1 => ("cell.set", json!({"cell": cell, "input": format!("v{who}-{}", r.below(100))})),
+        2 => ("cell.set", json!({"cell": cell, "input": format!("=B2+{}", r.below(50))})),
+        3 => ("selection.set", json!({"range": cell})),
+        4 => ("home.bold", json!({})),
+        5 => ("review.newComment", json!({"cell": cell, "text": format!("from {who}"), "author": format!("P{who}")})),
+        6 => ("home.insertRows", json!({})),
+        7 => ("home.deleteRows", json!({})),
+        8 => ("home.insertColumns", json!({})),
+        _ => ("range.setValues", json!({"range": format!("F{}", 1 + r.below(5)), "values": [[who]]})),
     }
 }
 
-/// P3-CONV-01 (engine level): editors with random edits, random delays and random ordering at a
-/// simulated server all end with the server's workbook.
+/// P3-CONV-01 (engine level): editors with random edits (rows and columns included), random
+/// delays and random ordering at the server all end with the server's workbook.
 #[test]
 fn editors_and_server_converge() {
-    for seed in 1..=40u64 {
+    let mut total_resyncs = 0;
+    for seed in 1..=60u64 {
         let mut r = Lcg(seed);
-        let people = 2 + (seed % 5) as usize;
+        let people = 2 + (seed % 7) as usize;
         let start = seeded();
-        let mut server = replica_of(&start);
-        let mut seq = 0u64;
+        let mut server = Server::new((*start.active().unwrap().wb).clone(), 0);
         let mut editors: Vec<(Session, Client)> = (0..people)
             .map(|i| {
                 let mut s = replica_of(&start);
                 s.start_live();
-                (s, Client::new(&format!("p{i}"), 0))
+                let mut c = Client::new(&format!("p{i}"), 0);
+                c.end_frame(&s);
+                (s, c)
             })
             .collect();
-        let mut to_server: std::collections::VecDeque<(usize, String, LiveStep)> = Default::default();
+        let mut to_server: std::collections::VecDeque<(usize, String, u64, LiveStep)> = Default::default();
         let mut to_editor: Vec<std::collections::VecDeque<Incoming>> = vec![Default::default(); people];
-        let mut resyncs = 0;
+        let deliver = |server: &mut Server,
+                       to_editor: &mut Vec<std::collections::VecDeque<Incoming>>,
+                       (who, ccid, base, step): (usize, String, u64, LiveStep)| {
+            match server.submit(&format!("u{who}"), &format!("P{who}"), LiveRole::Editor, &ccid, base, &step) {
+                Ok((seq, applied)) => {
+                    for (i, queue) in to_editor.iter_mut().enumerate() {
+                        queue.push_back(Incoming::Applied {
+                            seq,
+                            client_command_id: (i == who).then(|| ccid.clone()),
+                            step: Box::new(applied.clone()),
+                        });
+                    }
+                }
+                Err(_) => to_editor[who].push_back(Incoming::Rejected { client_command_id: ccid }),
+            }
+        };
+        let resync = |s: &mut Session, c: &mut Client, server: &Server, queue: &mut std::collections::VecDeque<Incoming>| {
+            replace(s, (*server.workbook().unwrap()).clone()).unwrap();
+            c.resynced(s, server.seq);
+            queue.clear();
+        };
         for _round in 0..400 {
             match r.below(3) {
                 0 => {
@@ -310,30 +332,15 @@ fn editors_and_server_converge() {
                     let (id, params) = random_edit(&mut r, who);
                     let (s, c) = &mut editors[who];
                     let _ = s.execute(id, params);
+                    let base = c.seq;
                     for (ccid, step) in c.outgoing(s) {
-                        to_server.push_back((who, ccid, over_the_wire(&step)));
+                        to_server.push_back((who, ccid, base, over_the_wire(&step)));
                     }
                     c.end_frame(s);
                 }
                 1 => {
-                    if let Some((who, ccid, step)) = to_server.pop_front() {
-                        let accepted = apply(&mut server, &step).is_ok();
-                        for (i, queue) in to_editor.iter_mut().enumerate() {
-                            if accepted {
-                                seq += 1;
-                                queue.push_back(Incoming::Applied {
-                                    seq,
-                                    client_command_id: (i == who).then(|| ccid.clone()),
-                                    step: Box::new(step.clone()),
-                                });
-                                seq -= 1;
-                            } else if i == who {
-                                queue.push_back(Incoming::Rejected { client_command_id: ccid.clone() });
-                            }
-                        }
-                        if accepted {
-                            seq += 1;
-                        }
+                    if let Some(sent) = to_server.pop_front() {
+                        deliver(&mut server, &mut to_editor, sent);
                     }
                 }
                 _ => {
@@ -341,57 +348,125 @@ fn editors_and_server_converge() {
                     if let Some(message) = to_editor[who].pop_front() {
                         let (s, c) = &mut editors[who];
                         if c.receive(s, &message) == Outcome::NeedResync {
-                            resyncs += 1;
-                            let wb = (*server.active().unwrap().wb).clone();
-                            replace(s, wb).unwrap();
-                            c.resynced(seq);
-                            to_editor[who].clear();
+                            total_resyncs += 1;
+                            resync(s, c, &server, &mut to_editor[who]);
+                            to_server.retain(|(w, ..)| *w != who);
                         }
                         c.end_frame(s);
                     }
                 }
             }
         }
-        // Everything still in flight arrives.
-        while let Some((who, ccid, step)) = to_server.pop_front() {
-            let accepted = apply(&mut server, &step).is_ok();
-            if accepted {
-                seq += 1;
-            }
-            for (i, queue) in to_editor.iter_mut().enumerate() {
-                if accepted {
-                    queue.push_back(Incoming::Applied { seq, client_command_id: (i == who).then(|| ccid.clone()), step: Box::new(step.clone()) });
-                } else if i == who {
-                    queue.push_back(Incoming::Rejected { client_command_id: ccid.clone() });
-                }
-            }
+        while let Some(sent) = to_server.pop_front() {
+            deliver(&mut server, &mut to_editor, sent);
         }
-        for (who, queue) in to_editor.iter_mut().enumerate() {
+        for who in 0..people {
             let (s, c) = &mut editors[who];
-            while let Some(message) = queue.pop_front() {
+            while let Some(message) = to_editor[who].pop_front() {
                 if c.receive(s, &message) == Outcome::NeedResync {
-                    resyncs += 1;
-                    replace(s, (*server.active().unwrap().wb).clone()).unwrap();
-                    c.resynced(seq);
-                    break;
+                    total_resyncs += 1;
+                    resync(s, c, &server, &mut to_editor[who]);
                 }
             }
-        }
-        for (who, (s, c)) in editors.iter().enumerate() {
             assert_eq!(c.pending(), 0, "seed {seed}: editor {who} still has pending steps");
-            if !same(s, &server) {
-                let (x, y) = (s.active().unwrap().wb.clone(), server.active().unwrap().wb.clone());
+            if !same(s, &server.session) {
+                let (x, y) = (s.active().unwrap().wb.clone(), server.workbook().unwrap());
                 for (i, (a, b)) in x.sheets.iter().zip(&y.sheets).enumerate() {
-                    for c in a.cells.diff(&b.cells) {
-                        println!("sheet {i} {}: editor {:?}\n   server {:?}", c.a1(), a.cells.get(c), b.cells.get(c));
-                    }
-                    if a.comments != b.comments {
-                        println!("sheet {i}: comments differ");
+                    for c in a.cells.diff(&b.cells).iter().take(3) {
+                        println!("sheet {i} {}: editor {:?}\n   server {:?}", c.a1(), a.cells.get(*c), b.cells.get(*c));
                     }
                 }
-                println!("sheets {} vs {}, styles same {}", x.sheets.len(), y.sheets.len(), x.styles == y.styles);
             }
-            assert!(same(s, &server), "seed {seed}: editor {who} differs from the server ({resyncs} resyncs)");
+            assert!(same(s, &server.session), "seed {seed}: editor {who} differs from the server");
         }
     }
+    println!("{total_resyncs} resyncs in 60 runs");
+}
+
+/// P3-REBASE-01, -02, -03: different cells both stay; the same cell takes the later change; an
+/// edit sent before someone inserted rows above it lands on the shifted cell, for everyone.
+#[test]
+fn late_steps_shift_with_rows_inserted_by_others() {
+    let start = seeded();
+    let mut server = Server::new((*start.active().unwrap().wb).clone(), 0);
+    let step_of = |s: &mut Session, id: &str, params: serde_json::Value| {
+        s.start_live();
+        s.execute(id, params).unwrap();
+        s.take_live_steps().pop().unwrap()
+    };
+    let mut a = replica_of(&start);
+    let mut b = replica_of(&start);
+    // A inserts two rows above row 3; B, not knowing, types into C5 (its "Sugar" row's price).
+    a.execute("selection.set", json!({"range": "A3:A4"})).unwrap();
+    let insert = step_of(&mut a, "home.insertRows", json!({}));
+    let typed = step_of(&mut b, "cell.set", json!({"cell": "C4", "input": "99"}));
+    server.submit("ua", "A", LiveRole::Editor, "a-1", 0, &insert).unwrap();
+    let (_, applied) = server.submit("ub", "B", LiveRole::Editor, "b-1", 0, &typed).unwrap();
+    assert_eq!(applied.params["cell"], "C6");
+    let text = |server: &Server, a1: &str| {
+        let wb = server.workbook().unwrap();
+        crate::display::cell_text(&wb, &wb.sheets[0], gridcraft_core::CellRef::parse(a1).unwrap())
+    };
+    assert_eq!((text(&server, "A6"), text(&server, "C6")), ("Sugar".to_string(), "99".to_string()));
+    // Same cell, sent at the same time: the later one wins (P3-REBASE-02).
+    let first = step_of(&mut a, "cell.set", json!({"cell": "E1", "input": "first"}));
+    let second = step_of(&mut b, "cell.set", json!({"cell": "E1", "input": "second"}));
+    server.submit("ua", "A", LiveRole::Editor, "a-2", 2, &first).unwrap();
+    server.submit("ub", "B", LiveRole::Editor, "b-2", 2, &second).unwrap();
+    assert_eq!(text(&server, "E1"), "second");
+}
+
+#[test]
+fn an_edit_in_rows_someone_deleted_is_refused() {
+    let start = seeded();
+    let mut server = Server::new((*start.active().unwrap().wb).clone(), 0);
+    let mut a = replica_of(&start);
+    let mut b = replica_of(&start);
+    a.start_live();
+    b.start_live();
+    a.execute("selection.set", json!({"range": "A4"})).unwrap();
+    a.execute("home.deleteRows", json!({})).unwrap();
+    b.execute("cell.set", json!({"cell": "C4", "input": "late"})).unwrap();
+    server.submit("ua", "A", LiveRole::Editor, "a-1", 0, &a.take_live_steps()[0]).unwrap();
+    assert_eq!(server.submit("ub", "B", LiveRole::Editor, "b-1", 0, &b.take_live_steps()[0]), Err(Refusal::Stale));
+}
+
+/// P3-ROLE-01..05 at the server.
+#[test]
+fn roles_are_checked_per_step() {
+    let start = seeded();
+    let mut server = Server::new((*start.active().unwrap().wb).clone(), 0);
+    let mut s = replica_of(&start);
+    s.start_live();
+    s.execute("cell.set", json!({"cell": "A9", "input": "x"})).unwrap();
+    s.execute("review.newComment", json!({"cell": "B9", "text": "hi", "author": "Someone Else"})).unwrap();
+    let steps = s.take_live_steps();
+    // Viewers: nothing. Commenters: comments only. Editors: both.
+    assert_eq!(server.submit("v", "V", LiveRole::Viewer, "v-1", 0, &steps[1]), Err(Refusal::NotAllowed));
+    assert_eq!(server.submit("c", "C", LiveRole::Commenter, "c-1", 0, &steps[0]), Err(Refusal::NotAllowed));
+    let (_, applied) = server.submit("c", "Chitra", LiveRole::Commenter, "c-2", 0, &steps[1]).unwrap();
+    // The author is the signed-in person, whatever the step said (P3-ROLE-04).
+    assert_eq!(applied.params["author"], "Chitra");
+    let wb = server.workbook().unwrap();
+    let comment = wb.sheets[0].comments.get(&gridcraft_core::CellRef::parse("B9").unwrap()).unwrap();
+    assert_eq!(comment.author, "Chitra");
+    // A Commenter cannot delete someone else's comment (P3-ROLE-03); its author can.
+    let mut t = replica_of(&start);
+    t.start_live();
+    t.execute("review.deleteComment", json!({"cell": "B9"})).unwrap();
+    let delete = t.take_live_steps();
+    // (t never had the comment, so build the delete step by hand from the selection.)
+    let delete = delete.into_iter().next().unwrap_or(LiveStep {
+        sheet: 0,
+        sheet_name: "Sheet1".into(),
+        selection: Selection::default(),
+        id: "review.deleteComment".into(),
+        params: json!({"cell": "B9"}),
+        clipboard: None,
+    });
+    assert_eq!(server.submit("d", "Dev", LiveRole::Commenter, "d-1", 1, &delete), Err(Refusal::NotAllowed));
+    assert!(server.submit("c", "Chitra", LiveRole::Commenter, "c-3", 1, &delete).is_ok());
+    // Files and scripts never run on the shared workbook.
+    let file = LiveStep { id: "file.save".into(), ..delete };
+    assert_eq!(server.submit("e", "E", LiveRole::Editor, "e-1", 2, &file), Err(Refusal::NotAllowed));
 }

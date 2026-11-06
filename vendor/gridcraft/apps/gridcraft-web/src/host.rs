@@ -163,7 +163,9 @@ impl Bridge {
                 LiveMessage::Start { seq } => {
                     app.session.start_live();
                     let prefix = format!("{:x}", (js_sys::Math::random() * 1e15) as u64);
-                    *self.live.borrow_mut() = Some(Client::new(&prefix, seq));
+                    let mut client = Client::new(&prefix, seq);
+                    client.end_frame(&app.session);
+                    *self.live.borrow_mut() = Some(client);
                 }
                 LiveMessage::Resync { name, bytes, seq } => {
                     if let Ok((wb, _)) = gridcraft_engine::io::open_bytes(&name, &bytes) {
@@ -171,7 +173,7 @@ impl Bridge {
                     }
                     let _ = app.session.take_live_steps();
                     if let Some(client) = self.live.borrow_mut().as_mut() {
-                        client.resynced(seq);
+                        client.resynced(&app.session, seq);
                     }
                     incoming.clear();
                 }

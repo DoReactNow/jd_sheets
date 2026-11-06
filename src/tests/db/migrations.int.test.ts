@@ -18,6 +18,7 @@ describe("migrations", () => {
     expect(rows.map((row) => row.table_name)).toEqual([
       "_prisma_migrations",
       "audit_events",
+      "collab_ops",
       "identity_group_members",
       "identity_groups",
       "identity_rate_limits",

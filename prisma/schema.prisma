@@ -76,6 +76,7 @@ model Workbook {
   recentOpens             RecentOpen[]
   grants                  ShareGrant[]
   linkOpens               LinkOpen[]
+  collabOps               CollabOp[]
 
   @@index([ownerId, updatedAt(sort: Desc)])
   @@index([updatedAt(sort: Desc)])
@@ -197,6 +198,7 @@ model User {
   grants             ShareGrant[]  @relation("GrantUser")
   grantsCreated      ShareGrant[]  @relation("GrantCreatedBy")
   linkOpens          LinkOpen[]
+  liveOps            CollabOp[]
 
   @@index([status, createdAt])
   @@map("identity_users")
@@ -427,4 +429,30 @@ model MailOutbox {
 
   @@index([to, createdAt(sort: Desc)])
   @@map("mail_outbox")
+}
+
+// ---------------------------------------------------------------------------
+// collab module (database_schema.md 3.15, Decision 58): written by the app on the Rust service's
+// behalf, through internal routes.
+// ---------------------------------------------------------------------------
+
+// Owner: collab. Every accepted live change, in the server's order. `baseVersionId` is the version
+// it builds on: after a restart the service loads the current version and replays the changes
+// built on it. A live snapshot becomes the next base; a save or restore starts a new one.
+model CollabOp {
+  workbookId      String   @map("workbook_id") @db.Uuid
+  workbook        Workbook @relation(fields: [workbookId], references: [id], onDelete: Cascade)
+  seq             BigInt
+  baseVersionId   String   @map("base_version_id") @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  user            User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  clientCommandId String   @map("client_command_id") @db.VarChar(80)
+  commandId       String   @map("command_id") @db.VarChar(80)
+  step            Json
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@id([workbookId, seq])
+  @@unique([workbookId, userId, clientCommandId])
+  @@index([workbookId, baseVersionId, seq])
+  @@map("collab_ops")
 }

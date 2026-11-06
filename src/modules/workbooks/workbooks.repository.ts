@@ -23,6 +23,8 @@ export interface NewVersion {
   sha256: string;
   source: WorkbookVersionSource;
   createdById: string | null;
+  /** Live snapshots: the people whose changes it holds (Decision 56). */
+  contributorIds?: string[];
 }
 
 const workbookSelect = {
@@ -250,6 +252,7 @@ export const workbooksRepository = {
         createdAt: true,
         restoredFromId: true,
         createdById: true,
+        contributorIds: true,
         storageKey: true,
       },
     });

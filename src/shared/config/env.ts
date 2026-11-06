@@ -44,6 +44,8 @@ const baseSchema = z.object({
   TRUSTED_PROXY_HOPS: z.coerce.number().int().min(0).max(5).default(0),
   /** The Rust collab service, as the app reaches it. */
   COLLAB_URL: z.url({ error: "COLLAB_URL must be a full URL" }),
+  /** The WebSocket address browsers use for live editing (Phase 3); defaults to COLLAB_URL as ws://. */
+  COLLAB_PUBLIC_URL: z.url({ error: "COLLAB_PUBLIC_URL must be a full URL" }).optional(),
   COLLAB_TOKEN_SECRET: secret("COLLAB_TOKEN_SECRET"),
   INTERNAL_SERVICE_TOKEN: secret("INTERNAL_SERVICE_TOKEN"),
   WORKBOOK_VALIDATOR: z.enum(["collab", "fake"], {

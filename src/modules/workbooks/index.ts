@@ -5,6 +5,7 @@ import { workbooksService } from "./workbooks.instance";
 
 export type { SavedVersionDto, WorkbookDto } from "./workbooks.types";
 export { workbookRecords, type Tx as WorkbookTx } from "./workbooks.repository";
+export { workbooksService } from "./workbooks.instance";
 export { purgeOrphanFilesJob, workbookJobs, workbookSchedules } from "./workbooks.jobs";
 
 /** The Phase 0 workbook role resolver (owner only), installed by src/instrumentation.ts. */

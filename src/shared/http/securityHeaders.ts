@@ -8,7 +8,7 @@ export function createNonce(): string {
 
 export function pageContentSecurityPolicy(
   nonce: string,
-  { development }: { development: boolean },
+  { development, connect = [] }: { development: boolean; connect?: string[] },
 ): string {
   return [
     "default-src 'self'",
@@ -18,7 +18,8 @@ export function pageContentSecurityPolicy(
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' blob: data:",
     "font-src 'self'",
-    "connect-src 'self'",
+    // Live editing's WebSocket to the Rust service (Phase 3), when it is on another origin.
+    `connect-src 'self'${connect.map((origin) => ` ${origin}`).join("")}`,
     // The editor page frames our own GridCraft build, nothing else (Decision 7).
     "frame-src 'self'",
     "worker-src 'self'",

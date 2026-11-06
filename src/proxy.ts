@@ -4,11 +4,26 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createNonce, pageContentSecurityPolicy } from "@/shared/http/securityHeaders";
 
+/** The live editing WebSocket's origin (Phase 3): COLLAB_PUBLIC_URL, or COLLAB_URL as ws://. */
+function liveOrigin(): string[] {
+  // The proxy runs before the app's env module; it only reads these two addresses.
+  // eslint-disable-next-line no-restricted-properties
+  const configured =
+    process.env.COLLAB_PUBLIC_URL ?? process.env.COLLAB_URL?.replace(/^http/, "ws");
+  if (!configured) return [];
+  try {
+    return [new URL(configured).origin.replace(/^http/, "ws")];
+  } catch {
+    return [];
+  }
+}
+
 export function proxy(request: NextRequest) {
   const policy = pageContentSecurityPolicy(createNonce(), {
     // Set by Next.js itself and not part of the app's environment schema.
     // eslint-disable-next-line no-restricted-properties
     development: process.env.NODE_ENV === "development",
+    connect: liveOrigin(),
   });
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("Content-Security-Policy", policy);

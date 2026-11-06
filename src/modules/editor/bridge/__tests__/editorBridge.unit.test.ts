@@ -224,7 +224,7 @@ describe("unsaved state (P0-BRIDGE-05, P0-BRIDGE-06, P0-BRIDGE-09)", () => {
   });
 });
 
-describe("patch 0001 messages (P2-MODE-05, P2-SAVE-01)", () => {
+describe("access mode and save-now messages (P2-MODE-05, P2-SAVE-01)", () => {
   async function opened() {
     const t = setup();
     t.send({ type: MESSAGE.ready });

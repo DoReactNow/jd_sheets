@@ -6,7 +6,8 @@ import type { EditorBuild } from "./system.schemas";
 
 const buildInfoSchema = z.object({
   gridcraft: z.object({ tag: z.string(), commit: z.string() }),
-  patches: z.array(z.string()),
+  // Decision 55: no patches any more; older builds listed them.
+  patches: z.array(z.string()).optional().default([]),
 });
 
 export async function readEditorBuild(

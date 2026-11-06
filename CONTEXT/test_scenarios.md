@@ -134,8 +134,8 @@ These apply to every endpoint, screen, job, table and Rust handler. A plan does 
 - **P0-ARCH-05** A `route.ts` without an access declaration fails the route-coverage test.
 
 ### Editor build
-- **P0-EDIT-01** The editor build never writes inside `vendor/gridcraft`.
-- **P0-EDIT-02** A patch that does not apply fails the build and names the patch.
+- **P0-EDIT-01** *(Retired by Decision 55: GridCraft is our own code, no patches.)* The editor build never writes inside `vendor/gridcraft`.
+- **P0-EDIT-02** *(Retired by Decision 55: GridCraft is our own code, no patches.)* A patch that does not apply fails the build and names the patch.
 - **P0-EDIT-03** The build records the GridCraft tag, commit and applied patches, shown on the diagnostics page.
 - **P0-EDIT-04** The editor is served from our own origin under `/editor/`, with GridCraft's licence files.
 - **P0-EDIT-05** With no patches, the built editor behaves exactly like upstream's web build.
@@ -401,7 +401,7 @@ These apply to every endpoint, screen, job, table and Rust handler. A plan does 
 - **P2-ROLE-09** Only the Owner can transfer ownership, trash or delete.
 
 ### Editor modes (patch 0001)
-- **P2-MODE-01** Patch 0001 applies to the pinned tag and names its upstream pull request.
+- **P2-MODE-01** *(Retired by Decision 55: GridCraft is our own code, no patches.)* Patch 0001 applies to the pinned tag and names its upstream pull request.
 - **P2-MODE-02** In view mode, typing, pasting, deleting, formatting, sheet changes, undo and Save do nothing, and the ribbon shows editing commands disabled.
 - **P2-MODE-03** In view mode the API also refuses any save (X-ACCESS-09).
 - **P2-MODE-04** In comment mode only comment commands work.

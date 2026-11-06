@@ -76,7 +76,7 @@ export interface EditorBridge {
   hasUnsavedWork(): boolean;
   /** Bytes of the last save the server refused as a conflict, for "Save as a copy". */
   conflictedBytes(): Uint8Array | null;
-  /** Switches the editor's access mode at once (patch 0001, P2-MODE-05). */
+  /** Switches the editor's access mode at once (P2-MODE-05). */
   setMode(mode: EditorMode): void;
   /** Asks the editor to save, for autosave; the save it hands over is marked as one. */
   saveNow(): void;

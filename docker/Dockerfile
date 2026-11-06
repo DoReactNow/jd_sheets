@@ -30,7 +30,7 @@ COPY patches ./patches
 COPY scripts/editor-build.mjs ./scripts/editor-build.mjs
 COPY scripts/lib ./scripts/lib
 COPY services/collab ./services/collab
-RUN EDITOR_BUILD_SOURCE=copy node scripts/editor-build.mjs
+RUN node scripts/editor-build.mjs
 RUN cd services/collab && cargo build --release --locked
 
 # --- Node ----------------------------------------------------------------------------------------

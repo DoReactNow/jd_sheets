@@ -1,5 +1,5 @@
 {
-  "source": "vendor/gridcraft/apps/gridcraft-web/src/host.rs at the pinned tag, with patches/gridcraft/0001-access-mode.patch",
+  "source": "vendor/gridcraft/apps/gridcraft-web/src/host.rs (our own GridCraft, Decision 55)",
   "fromEditor": [
     { "type": "gridcraft:ready", "version": "0.16.1" },
     { "type": "gridcraft:dirty", "dirty": true },

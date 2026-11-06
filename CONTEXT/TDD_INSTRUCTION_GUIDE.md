@@ -58,7 +58,7 @@ Copy this for every item. Fill every section; write "None" where something does 
 
 **Module boundaries:** Owning module; other modules used through `index.ts`; cross-module foreign keys and their `onDelete`.
 
-**Jobs, adapters, GridCraft:** Jobs added (name, trigger, idempotency key). Interfaces used and the `fake`/`local` implementation the tests use. Any bridge message or patch touched. Any Rust endpoint touched.
+**Jobs, adapters, GridCraft:** Jobs added (name, trigger, idempotency key). Interfaces used and the `fake`/`local` implementation the tests use. Any bridge message or GridCraft change. Any Rust endpoint touched.
 
 #### Step 1: Schema and migration
 - [ ] Change `prisma/schema.prisma`
@@ -93,7 +93,7 @@ Copy this for every item. Fill every section; write "None" where something does 
 - [ ] `npm run lint` (ESLint + lint:arch + SSOT scan)
 - [ ] `npm run typecheck`
 - [ ] `npm run rust:check` (fmt check, clippy -D warnings)
-- [ ] `npm run build` · `npm run build:worker` · `npm run rust:build` · `npm run editor:build` (if the editor or patches changed)
+- [ ] `npm run build` · `npm run build:worker` · `npm run rust:build` · `npm run editor:build` (if the editor or `vendor/gridcraft` changed) · `npm run editor:test` (if `vendor/gridcraft` changed)
 - [ ] `npm run test:unit` · `npm run test:integration` · `npm run rust:test` · `npm run test:contract`
 - [ ] `npm run test:e2e` (if the item touches a critical journey)
 - [ ] Manual check in the browser (UI items): layout at 1440 and 390 px, keyboard use, empty and error states
@@ -133,8 +133,8 @@ No literal email domain, company or product name, timezone, size limit, duration
 ### Rule 8: Module boundaries
 Other modules only through `index.ts`. Repositories write only their own tables. Cross-module foreign keys state `onDelete` (`Restrict` default, `SetNull` with a reason, never `Cascade`). `npm run lint:arch` passes.
 
-### Rule 9: GridCraft is never edited
-Nothing inside `vendor/gridcraft` changes. Needed changes go in `patches/gridcraft/` with a header naming the upstream pull request (Decision 8). Only `src/modules/editor/bridge/` knows GridCraft message names; only `services/collab/src/engine/` imports `gridcraft_*` crates. A test enforces both.
+### Rule 9: GridCraft is our own code, behind clear boundaries
+We edit `vendor/gridcraft` directly (Decision 55, superseding Decision 8): small, tested changes, its licence and notice files kept. Only `src/modules/editor/bridge/` knows GridCraft message names; only `services/collab/src/engine/` imports `gridcraft_*` crates. A test enforces both.
 
 ### Rule 10: The server is the lock
 Anything a role must not do is refused by the server, with a test calling the API directly (not through the UI). Hiding a button or setting the editor mode is never the only protection (Decision 9).
@@ -194,7 +194,7 @@ The grid is a canvas. E2E tests use the keyboard and check results through the A
 
 **Goal:** The owner opens Share, adds a colleague as Viewer; the colleague sees it under "Shared with me" and can open but not change it.
 
-**Why now / dependencies:** Needs users (Phase 1), workbooks and versions (Phase 0), the editor mode patch (W-2xx).
+**Why now / dependencies:** Needs users (Phase 1), workbooks and versions (Phase 0), the editor access mode (W-2xx).
 
 **Access:** `'authenticated'` + workbook capability `share`. Only the Owner passes. Super Admin bypass does not pass.
 
@@ -204,7 +204,7 @@ The grid is a canvas. E2E tests use the keyboard and check results through the A
 
 **Module boundaries:** `sharing` owns grants. Reads users through `identity`'s `index.ts`. Writes an audit event through `audit`'s `index.ts`.
 
-**Jobs, adapters, GridCraft:** None for jobs. The editor opens with `mode=view` for Viewers (patch 0001).
+**Jobs, adapters, GridCraft:** None for jobs. The editor opens with `mode=view` for Viewers (the access mode).
 
 #### Step 1: Schema and migration
 - [ ] `SharingGrant` model, unique (`workbookId`, `userId`)
@@ -230,7 +230,7 @@ The grid is a canvas. E2E tests use the keyboard and check results through the A
 
 ## Part 6: Infrastructure Work Items
 
-Setup work (toolchain, editor build, Docker, CI) uses the same format. "RED tests" means a check that proves the capability, for example: a script that fails when a file inside `vendor/gridcraft` is modified; a test that the env loader refuses `DEV_PRINCIPAL=on` in production; a CI step that fails when a patch does not apply. Write the check first, watch it fail, then add the configuration.
+Setup work (toolchain, editor build, Docker, CI) uses the same format. "RED tests" means a check that proves the capability, for example: a test that the env loader refuses `DEV_PRINCIPAL=on` in production. Write the check first, watch it fail, then add the configuration.
 
 ---
 
@@ -250,7 +250,7 @@ Setup work (toolchain, editor build, Docker, CI) uses the same format. "RED test
 12. Declaring a UI item done without opening it in the browser.
 13. Hard-coding `localhost` or ports.
 14. Editing an applied migration.
-15. Editing anything in `vendor/gridcraft`, or naming GridCraft messages outside the bridge.
+15. Naming GridCraft messages outside the bridge, or importing GridCraft crates outside the Rust engine module.
 16. Relying on the editor mode or a hidden button instead of a server check.
 17. Returning 403 for a workbook the person cannot see (it must be 404).
 18. Saving without `If-Match`, or writing a version row before the file is safely stored.

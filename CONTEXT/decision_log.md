@@ -142,7 +142,7 @@ Three processes in production (app, worker, collab) plus Postgres and Caddy. The
 
 ---
 
-### Decision 8: Changes GridCraft Needs: Proposed Upstream, Patched Locally Meanwhile
+### Decision 8 (superseded by Decision 55): Changes GridCraft Needs: Proposed Upstream, Patched Locally Meanwhile
 
 **Date:** 2026-11-06
 **Status:** Accepted (owner chose the recommendation)
@@ -807,3 +807,21 @@ Because office addresses change, a change can leave everyone outside the allowed
 - **Administrator open:** the audit event's id is the permission to read the content for 15 minutes, in view mode; each open writes a new event.
 - **Imports** are converted by the Rust service (`POST /internal/workbooks/convert`) with GridCraft's readers; the original name comes in the `x-file-name` header.
 - **Editor tab id** (`x-editor-tab`) identifies the page holding the lease; `EDITING_ELSEWHERE` is a new catalog code for "you are editing in another tab".
+
+---
+
+### Decision 55: GridCraft Is Our Own Code
+
+**Date:** 2026-11-06
+**Status:** Accepted (owner: JD Sheets is internal only and will never be sold; "let's go with your recommendation" on all three questions). **Supersedes Decision 8 and Decision 53; amends Decisions 6 and 54.**
+
+#### Decision
+- `vendor/gridcraft` is a plain folder in our repository, no longer a submodule, and we edit it directly. Our copy is based on v0.16.1. Patch 0001 is folded in, and `patches/gridcraft/` is gone.
+- We do not contribute upstream. The pull request storytold/gridcraft#3463 was closed with a short note, and the `DoReactNow/gridcraft` fork is to be deleted (the owner does this, see below).
+- We stay on v0.16.1. There are no automatic updates: the weekly upstream job, its verify workflow, `upstream-bump.mjs` and the vendor-clean check are removed. If we ever need a specific fix from a GridCraft release, we copy it in by hand with a test.
+- We keep GridCraft's `LICENSE-MIT`, `LICENSE-APACHE` and `NOTICE` files (the MIT/Apache licence allows private, modified, internal use, and asks only for that).
+- Boundaries that stay: only `src/modules/editor/bridge/` names GridCraft messages, and only `services/collab/src/engine/` imports GridCraft crates.
+- `npm run editor:test` runs the tests of our GridCraft changes.
+- **Ribbon greying (completes P2-MODE-02):** `SheetApp` has an `access` setting (`Edit`, `Comment`, `View`). In view mode the ribbon disables every tab except View; in comment mode it also leaves Review usable. The after-each-frame rule of Decision 54 still applies everywhere else (keyboard, formula bar, context menus).
+- **Phase 3:** the planned "patch 0002" (command messages) becomes direct changes, including to GridCraft's engine and UI where that is simpler.
+- **Scenarios retired:** P0-EDIT-01 and P0-EDIT-02 (patches apply, and a broken patch names itself) and P2-MODE-01 (each patch names its upstream pull request) no longer apply.

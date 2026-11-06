@@ -375,7 +375,7 @@ Detailed work items are written when each phase starts (Decision 36).
 
 **Execution order:** `W-201 → W-202 → W-203 → W-204 → W-205 → W-206 → W-207 → W-208 → W-209 → W-210 → W-211 → W-212 → W-213 → W-214 → W-215`.
 
-**Scenario coverage:** every Phase 2 scenario maps to the item named below. Moved: none. Partly met: P2-MODE-02's "ribbon shows editing commands disabled" (Decision 54); typing, paste, menus, shortcuts, undo and Save are all stopped.
+**Scenario coverage:** every Phase 2 scenario maps to the item named below. Moved: none. P2-MODE-02 complete with ribbon greying (Decision 55). P2-MODE-01 retired (Decision 55: no patches, no upstream).
 
 **Approved and built 2026-11-06** (owner: "Approve, build it"). Details settled while building: Decision 54.
 

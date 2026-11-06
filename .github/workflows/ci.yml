@@ -32,10 +32,8 @@ jobs:
     env:
       CI: "true"
     steps:
-      - name: Checkout (with the GridCraft submodule)
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
 
       - name: Node
         uses: actions/setup-node@v4
@@ -73,7 +71,7 @@ jobs:
       - name: Prisma client
         run: npm run db:generate
 
-      - name: Lint (ESLint, architecture, formatting, vendor check, files guard)
+      - name: Lint (ESLint, architecture, formatting, files guard)
         run: npm run lint
 
       - name: Typecheck

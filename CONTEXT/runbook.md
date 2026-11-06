@@ -18,7 +18,7 @@ How to run JD Sheets in production on the Hostinger VPS. **This is a stub.** It 
 1. VPS: Ubuntu LTS, updates, a non-root user, SSH keys only, password login off.
 2. Hostinger firewall: 80 and 443 from anywhere (Caddy applies the IP allowlist), 22 only from the owner's IPs.
 3. Docker Engine and Compose.
-4. Clone the repository with submodules; create `.env.production` from the example.
+4. Clone the repository; create `.env.production` from the example.
 5. DNS for the domain pointing to the VPS; Caddy gets certificates automatically.
 6. `docker compose -f docker/docker-compose.prod.yml up -d --build`.
 7. Migrations, `db:sync-rbac`, private seed (first Super Admin and bootstrap IP rules). Remove the seed password from `.env.production` afterwards.
@@ -29,7 +29,7 @@ How to run JD Sheets in production on the Hostinger VPS. **This is a stub.** It 
 - Deploy a new version: pull, `editor:build` inside the image build, migrations run first, then the new containers.
 - Roll back: start the previous image tags; migrations are backward compatible (Decision 30).
 - Check health: Diagnostics page, `docker compose ps`, container logs.
-- GridCraft updates arrive as pull requests from the weekly upstream job; merge only when green.
+- GridCraft is our own copy (Decision 55); there are no automatic updates. A fix from GridCraft's releases is copied in by hand only when needed, with a test.
 
 ## Recovery commands
 

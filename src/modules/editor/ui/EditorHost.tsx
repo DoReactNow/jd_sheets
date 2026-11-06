@@ -2,7 +2,7 @@
 
 // The editor page (Decisions 7, 21, 52): our top bar, and GridCraft in a same-origin iframe,
 // connected by the bridge. The editor opens in the mode of the person's role and the edit lease
-// (patch 0001): edit with the lease, comment for Commenters, view otherwise. Editors autosave
+// (access mode): edit with the lease, comment for Commenters, view otherwise. Editors autosave
 // 5 s after the last change (at most 30 s after the first); Ctrl/Cmd+S saves at once.
 // Also: an old version (?version=) and an administrator's audited open (?admin=) in view mode.
 import Link from "next/link";

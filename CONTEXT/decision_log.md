@@ -1006,3 +1006,17 @@ Because office addresses change, a change can leave everyone outside the allowed
 - **Only the owner logs in to the server.** The effective SSH settings (`sshd -T`) are `permitrootlogin yes` and `passwordauthentication yes`, so anyone on the internet can try root passwords. In W-410, with the owner: password login off and root by key only (`PasswordAuthentication no`, `PermitRootLogin prohibit-password`, in a drop-in file). Before closing the first terminal, check with `sshd -t` and a **new** browser-terminal tab; Hostinger's emergency console is the fallback. Then the Hostinger firewall: 22, 80 and 443 only.
 - **Outside watchdog:** later, not part of go-live.
 - A registry login already exists on the server (`/root/.docker/config.json`, 2026-10-29). W-410 first tries pulling a JD Sheets image with it; a new read-only GitHub token is needed only if that fails.
+
+---
+
+### Decision 63: Plan Approved; Second Office; Server-Wide Security After Go-Live
+
+**Date:** 2026-11-06
+**Status:** Accepted (owner: "now let's go ahead and deploy this project and make it live")
+
+#### Decision
+- **The Phase 4 plan is approved** (Decisions 61, 62). Build it and go live.
+- **Two offices at go-live** (`BOOTSTRAP_ALLOWED_CIDRS`): IT Park `103.144.119.117/32` and DB Park `103.163.224.78/32`. Further locations are added on the Network access page.
+- **Server-wide security waits until after this project** (owner's choice): SSH password login, root login, and the Hostinger firewall stay as they are for now. They affect every app on the server, not only JD Sheets.
+  - JD Sheets itself publishes no ports (Decision 62), so its part of P4-SEC-04 is met. The server-wide part of P4-SEC-04 (SSH keys only, firewall) **moves to a follow-up after go-live**, and `hardening_results.md` records it as an open risk.
+  - The snapshot-and-new-tab steps of Decision 62 belonged to that SSH change and move with it. A Hostinger snapshot before the first deploy is still recommended.

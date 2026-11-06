@@ -21,7 +21,7 @@ The source of truth for what is done and what is next. **Check this file first i
 | 1 | Identity, access and the IP wall | Sign-in, sign-up with OTP, approval queue, admin user screens, network rules, blocked page, audit trail | **DONE** (2026-11-06, built and tested locally; pull request open) |
 | 2 | Workbooks complete and sharing | Share dialog with four roles, view and comment modes, edit lease, version history and restore, autosave, import/export, trash, groups | **DONE** (2026-11-06, built and tested locally; pull request open) |
 | 3 | Live collaboration | Two people editing the same workbook at once, presence and selections, live comments | **DONE** (2026-11-06, built and tested locally; pull request open) |
-| 4 | Hardening and go-live | Load-tested, backed up, deployed on the Hostinger VPS behind the real domain | **PLANNED** (waiting for approval) |
+| 4 | Hardening and go-live | Load-tested, backed up, deployed on the Hostinger VPS behind the real domain | **IN PROGRESS** (plan approved 2026-11-06, Decision 63) |
 
 ---
 
@@ -505,7 +505,7 @@ Detailed work items are written when each phase starts (Decision 36).
 - [x] E2E: P3-E2E-01 (journey 7: two browsers edit live and end with the same values; a third as Viewer sees it live)
 - [x] Full local run once (lint, typecheck, unit, integration, contract, Rust, editor tests, E2E); docs updated (project_data 4.6 bridge table, database_schema, local_setup, decision log)
 
-### Phase 4: Hardening and go-live — PLANNED (waiting for the owner's approval)
+### Phase 4: Hardening and go-live — IN PROGRESS
 
 **Goal:** JD Sheets runs reliably for the whole company on the Hostinger VPS at `https://sheets.jdfusion.in`, reachable only from allowed networks (Super Admins from anywhere, Decision 57).
 
@@ -517,7 +517,9 @@ Detailed work items are written when each phase starts (Decision 36).
 
 **Execution order:** `W-401 → W-402 → W-403 → W-404 → W-405 → W-406 → W-407 → W-408 → W-409 → W-410 → W-411 → W-412`. W-402 to W-408 are built locally; W-409 needs the server (it runs after the first deploy of W-410 but before staff are invited).
 
-**Scenario coverage:** every Phase 4 scenario maps to an item below. New: P4-MAIL-01..03 (the real mailer, Decision 60). Carried from Phase 2: the fresh-clone drill (now CI building the images from a clean checkout, W-404) and P1-NET-16 (Caddy's blocked page with a closed allowlist, checked in CI in W-404; production keeps the allowlist open, Decision 57). Nothing is moved out of Phase 4.
+**Scenario coverage:** every Phase 4 scenario maps to an item below. New: P4-MAIL-01..03 (the real mailer, Decision 60). Carried from Phase 2: the fresh-clone drill (now CI building the images from a clean checkout, W-404) and P1-NET-16 (Caddy's blocked page with a closed allowlist, checked in CI in W-404; production keeps the allowlist open, Decision 57). Moved out of Phase 4 at the owner's request (Decision 63): the server-wide part of P4-SEC-04 (SSH keys only, Hostinger firewall) goes to a follow-up after go-live; JD Sheets' own part (no published ports) stays.
+
+**Approved 2026-11-06** (owner: "now let's go ahead and deploy this project and make it live").
 
 #### W-401: Server check and the proxy choice (owner, read-only)
 - [x] The owner pastes the read-only check (`runbook.md`, "Server check") and sends back the output (2026-11-06)
@@ -566,17 +568,17 @@ Detailed work items are written when each phase starts (Decision 36).
 - [ ] Results in `hardening_results.md`; memory limits adjusted if needed
 
 #### W-410: Go-live setup on the server (owner, guided; P4-SEC-04, -05, P4-DEPLOY-03)
-- [ ] Hostinger snapshot first. SSH keys only (Decision 62, checked from a new terminal tab before closing the first); Hostinger firewall: 22, 80, 443 only
+- [ ] Hostinger snapshot first (recommended). SSH and firewall: after go-live (Decision 63)
 - [ ] Registry access (the existing login, or a read-only GitHub token if it cannot pull) and `ops/setup.sh`; the owner types the app password, the Super Admin password and the backup passphrase
 - [ ] Traefik picks up `sheets.jdfusion.in` from the labels; HTTPS certificate issued, renewal automatic (P4-DEPLOY-03)
-- [ ] First `deploy.sh`; `db:sync-rbac`; private seed (`amit@jdfusion.in`, `103.144.119.117/32`); seed password removed from the env file
+- [ ] First `deploy.sh`; `db:sync-rbac`; private seed (`amit@jdfusion.in`, `103.144.119.117/32` and `103.163.224.78/32`); seed password removed from the env file
 - [ ] Google Drive authorisation for rclone (the owner approves in their own browser); first backup visible in Drive (P4-BACKUP-01); timers on
 
 #### W-411: Drills on the server (P4-DRILL-01, -02, P4-BACKUP-02, P4-SEC-03, -04)
 - [ ] Before staff use it: database down, Rust service down, worker down, disk nearly full (a test file, never real data); each alerts, recovers, and is written in the runbook (P4-DRILL-01)
 - [ ] `admin:reset-super-admin` and `admin:reset-ip-rules` on the server (P4-DRILL-02)
 - [ ] Restore drill from the Google Drive backup on a fresh machine (the owner's Mac in Docker); time recorded (P4-BACKUP-02)
-- [ ] From outside: only 80 and 443 answer (plus 22 per W-401), internal routes 404 (P4-SEC-03, -04)
+- [ ] From outside: JD Sheets answers only through Traefik on 443, internal routes 404 (P4-SEC-03; P4-SEC-04 JD Sheets part)
 
 #### W-412: Runbook, results and owner acceptance (P4-ACCEPT-01)
 - [ ] `runbook.md` and `hardening_results.md` complete, every procedure tried once

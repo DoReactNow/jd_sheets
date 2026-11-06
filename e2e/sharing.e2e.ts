@@ -77,7 +77,7 @@ test("journey 4: a Viewer cannot change anything; a Commenter can only comment",
   page,
   browser,
 }) => {
-  const id = await ownerWorkbook(page, "owner's");
+  const id = await ownerWorkbook(page, "111");
 
   // Share through the dialog.
   await page.getByRole("button", { name: "Share" }).click();
@@ -95,11 +95,11 @@ test("journey 4: a Viewer cannot change anything; a Commenter can only comment",
   const viewerFrame = await editorReady(other.page);
   const puts: string[] = [];
   other.page.on("request", (r) => r.method() === "PUT" && puts.push(r.url()));
-  await typeA1(other.page, viewerFrame, "viewer");
+  await typeA1(other.page, viewerFrame, "222");
   await other.page.keyboard.press(SAVE);
   await other.page.waitForTimeout(1_500);
   expect(puts).toEqual([]);
-  expect(await a1(page, id)).toBe("owner's");
+  expect(await a1(page, id)).toBe("111");
   // And the API refuses a Viewer's save directly (P2-MODE-03).
   const direct = await other.page.request.put(`/api/workbooks/${id}/content`, {
     headers: {
@@ -119,27 +119,32 @@ test("journey 4: a Viewer cannot change anything; a Commenter can only comment",
   await other.page.reload();
   await expect(other.page.getByTestId("editor-mode")).toHaveText(/Comment only/);
   const commenterFrame = await editorReady(other.page);
-  await typeA1(other.page, commenterFrame, "commenter");
+  await typeA1(other.page, commenterFrame, "333");
   await other.page.keyboard.press(SAVE);
   await other.page.waitForTimeout(1_500);
-  expect(await a1(page, id)).toBe("owner's");
+  expect(await a1(page, id)).toBe("111");
   await other.context.close();
 });
 
 test("journey 5: restore an older version", async ({ page }) => {
-  const id = await ownerWorkbook(page, "good");
+  const id = await ownerWorkbook(page, "444");
   const frame = await editorReady(page);
-  await typeA1(page, frame, "bad");
+  await typeA1(page, frame, "555");
   await saveNow(page, id);
-  expect(await a1(page, id)).toBe("bad");
+  expect(await a1(page, id)).toBe("555");
 
   await page.getByRole("button", { name: "History" }).click();
   const versions = page.getByRole("dialog").getByRole("listitem");
   await expect(versions).toHaveCount(3);
   // Newest first: 3 (bad), 2 (good), 1 (blank). Restore version 2.
+  const restored = page.waitForResponse(
+    (r) => r.url().includes("/restore") && r.request().method() === "POST",
+  );
   await versions.nth(1).getByRole("button", { name: "Restore" }).click();
+  expect((await restored).status()).toBe(200);
+  await page.waitForLoadState("load");
   await editorReady(page);
-  expect(await a1(page, id)).toBe("good");
+  expect(await a1(page, id)).toBe("444");
   const history = await (await page.request.get(`/api/workbooks/${id}/versions`)).json();
   expect(history.data.items.map((v: { number: number }) => v.number)).toEqual([4, 3, 2, 1]);
   expect(history.data.items[0]).toMatchObject({ source: "RESTORE", restoredFromNumber: 2 });
@@ -149,7 +154,7 @@ test("the edit lease: a second Editor sees who is editing and takes over after t
   page,
   browser,
 }) => {
-  const id = await ownerWorkbook(page, "mine");
+  const id = await ownerWorkbook(page, "666");
   const other = await asOther(browser);
   await page.request.put(`/api/workbooks/${id}/shares`, {
     data: { target: { type: "user", id: await otherUserId(page) }, role: "EDITOR" },
@@ -158,6 +163,7 @@ test("the edit lease: a second Editor sees who is editing and takes over after t
   await other.page.goto(`/w/${id}`);
   await expect(other.page.getByText("Test Member is editing")).toBeVisible({ timeout: 30_000 });
   await expect(other.page.getByTestId("editor-mode")).toHaveText("View only");
+  await editorReady(other.page);
 
   // The first Editor leaves; the lease is released on the way out.
   await page.getByRole("link", { name: "Back to your workbooks" }).click();
@@ -178,8 +184,8 @@ test("the edit lease: a second Editor sees who is editing and takes over after t
     )
     .toBe(1);
   const frame = await editorReady(other.page);
-  await typeA1(other.page, frame, "theirs");
+  await typeA1(other.page, frame, "777");
   await saveNow(other.page, id);
-  expect(await a1(page, id)).toBe("theirs");
+  expect(await a1(page, id)).toBe("777");
   await other.context.close();
 });

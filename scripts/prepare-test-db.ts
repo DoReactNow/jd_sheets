@@ -21,7 +21,9 @@ async function main(): Promise<void> {
   try {
     const { runTestSeed } = await import("../prisma/seed-test");
     await runTestSeed();
-    console.log("[prepare-test-db] test seed applied");
+    // Each run starts with no sign-in limits used up, so runs within the hour do not lock out.
+    await getPrisma().rateLimit.deleteMany();
+    console.log("[prepare-test-db] test seed applied, rate limits cleared");
   } finally {
     await getPrisma().$disconnect();
   }

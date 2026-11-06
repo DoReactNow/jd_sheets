@@ -7,6 +7,7 @@ import { createSmtpMailer, type SmtpSettings } from "../drivers/smtp";
 import type { MailMessage } from "../mailer";
 import { mailerContract } from "./mailerContract";
 
+let seq = 0;
 const USER = "sender@example.com";
 const PASSWORD = "abcdefghijklmnop";
 const received: (MailMessage & { from: string })[] = [];
@@ -62,13 +63,13 @@ mailerContract("smtp", {
 
 describe("smtp driver (P4-MAIL-01, -02)", () => {
   it("sends from MAIL_FROM", async () => {
-    const to = `from-${Date.now()}@jdfusion.in`;
+    const to = `from-${(seq += 1)}@jdfusion.in`;
     await createSmtpMailer(settings()).send({ to, subject: "s", text: "t" });
     expect(received.find((m) => m.to === to)?.from).toMatch(new RegExp(`^"?JD Sheets"? <${USER}>$`));
   });
 
   it("accepts the app password as Google shows it, in groups with spaces", async () => {
-    const to = `spaces-${Date.now()}@jdfusion.in`;
+    const to = `spaces-${(seq += 1)}@jdfusion.in`;
     await createSmtpMailer(settings({ password: "abcd efgh ijkl mnop" })).send({
       to,
       subject: "s",
@@ -103,7 +104,7 @@ describe("smtp driver (P4-MAIL-01, -02)", () => {
     await new Promise<void>((resolve) => closed.listen(0, "127.0.0.1", resolve));
     const closedPort = (closed.address() as { port: number }).port;
     await new Promise<void>((resolve) => closed.close(() => resolve()));
-    const started = Date.now();
+    const started = performance.now();
     await expect(
       createSmtpMailer(settings({ port: closedPort })).send({
         to: "a@jdfusion.in",
@@ -111,6 +112,6 @@ describe("smtp driver (P4-MAIL-01, -02)", () => {
         text: "t",
       }),
     ).rejects.toThrow(/could not reach the mail server/i);
-    expect(Date.now() - started).toBeLessThan(5000);
+    expect(performance.now() - started).toBeLessThan(5000);
   });
 });

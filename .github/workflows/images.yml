@@ -73,7 +73,8 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Stack check (deploy, headers, internal routes, client address, failed migration, rollback)
-        run: bash scripts/stack-check.sh "${GITHUB_SHA}"
+        # As root, like on the server; the registry login of this job is passed along.
+        run: sudo DOCKER_CONFIG="$HOME/.docker" bash scripts/stack-check.sh "${GITHUB_SHA}"
 
       - name: Container logs
         if: failure()

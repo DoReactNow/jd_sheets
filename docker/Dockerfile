@@ -28,7 +28,6 @@ RUN rustup target add wasm32-unknown-unknown \
 COPY --from=tools /usr/local/cargo/bin/trunk /usr/local/cargo/bin/wasm-bindgen /usr/local/cargo/bin/
 WORKDIR /src
 COPY vendor ./vendor
-COPY patches ./patches
 COPY scripts/editor-build.mjs ./scripts/editor-build.mjs
 COPY scripts/lib ./scripts/lib
 COPY services/collab ./services/collab

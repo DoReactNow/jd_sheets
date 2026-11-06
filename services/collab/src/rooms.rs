@@ -11,6 +11,7 @@ use tokio::time::Instant;
 use crate::app_client::{AppClient, OpToStore};
 use crate::config::Limits;
 use crate::engine::live::{LiveDoc, Rejection, Role, StoredOp};
+use crate::memory::{CgroupProbe, MemoryProbe, over_high_water};
 
 /// At most this many people editing one workbook at once (Decision 56); the next one views.
 pub const MAX_EDITORS: usize = 25;
@@ -18,6 +19,9 @@ pub const MAX_EDITORS: usize = 25;
 pub const SNAPSHOT_EVERY: Duration = Duration::from_secs(10 * 60);
 /// A room nobody is in is unloaded after this long (P3-PERF-02).
 pub const UNLOAD_AFTER: Duration = Duration::from_secs(10 * 60);
+
+/// The error `open` gives when memory is near the limit and nothing idle can be unloaded.
+pub const BUSY: &str = "busy";
 
 /// Stable presence colours (P3-PRES-01): the same person always gets the same one.
 const COLOURS: [&str; 12] = [
@@ -69,24 +73,44 @@ pub struct Rooms {
     pub app: AppClient,
     pub limits: Limits,
     next_conn: std::sync::atomic::AtomicU64,
+    memory: Arc<dyn MemoryProbe>,
 }
 
 impl Rooms {
     pub fn new(app: AppClient, limits: Limits) -> Rooms {
+        Rooms::with_memory(app, limits, Arc::new(CgroupProbe))
+    }
+
+    pub fn with_memory(app: AppClient, limits: Limits, memory: Arc<dyn MemoryProbe>) -> Rooms {
         Rooms {
             rooms: Mutex::default(),
             app,
             limits,
             next_conn: Default::default(),
+            memory,
         }
+    }
+
+    /// How many workbooks are loaded.
+    pub async fn count(&self) -> usize {
+        self.rooms.lock().await.len()
     }
 
     pub fn next_conn_id(&self) -> u64 {
         self.next_conn.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
     }
 
-    /// The room for a workbook, loaded from the app on first use (P3-RECOV-01).
+    /// The room for a workbook, loaded from the app on first use (P3-RECOV-01). An open room is
+    /// never refused; a new one is refused with [`BUSY`] when memory is near the limit and no idle
+    /// workbook could be unloaded (P4-LOAD-03).
     pub async fn open(&self, workbook_id: &str) -> Result<Arc<Mutex<Room>>, String> {
+        if let Some(room) = self.rooms.lock().await.get(workbook_id) {
+            return Ok(room.clone());
+        }
+        if over_high_water(self.memory.as_ref()) && self.unload_idle().await == 0 {
+            tracing::warn!(workbook = %workbook_id, "memory near the limit and nothing idle to unload");
+            return Err(BUSY.to_string());
+        }
         let mut rooms = self.rooms.lock().await;
         if let Some(room) = rooms.get(workbook_id) {
             return Ok(room.clone());
@@ -124,6 +148,34 @@ impl Rooms {
             empty_since: None,
             live_marked: false,
         })
+    }
+
+    /// Unloads every workbook nobody is in, saving a due version first; one that cannot be saved
+    /// stays. Returns how many were unloaded (P4-LOAD-03).
+    pub async fn unload_idle(&self) -> usize {
+        let mut unloaded = 0;
+        for room in self.all().await {
+            let (empty, dirty, id) = {
+                let r = room.lock().await;
+                (r.conns.is_empty(), r.dirty, r.workbook_id.clone())
+            };
+            if !empty {
+                continue;
+            }
+            if dirty {
+                self.snapshot(&room).await;
+            }
+            let r = room.lock().await;
+            if r.conns.is_empty() && !r.dirty {
+                drop(r);
+                self.remove(&id).await;
+                unloaded += 1;
+            }
+        }
+        if unloaded > 0 {
+            tracing::info!(unloaded, "idle workbooks unloaded to free memory");
+        }
+        unloaded
     }
 
     /// All rooms (for the snapshot and unload loop, and access changes).
@@ -214,6 +266,9 @@ impl Rooms {
     /// Every 30 seconds: renews the live marker, saves versions that are due, and unloads rooms
     /// nobody is in.
     pub async fn tick(&self) {
+        if over_high_water(self.memory.as_ref()) {
+            self.unload_idle().await;
+        }
         for room in self.all().await {
             self.heartbeat(&room).await;
             let (due, idle, id) = {

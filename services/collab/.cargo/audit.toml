@@ -1,0 +1,11 @@
+# cargo audit exceptions (P4-SEC-02). Each is logged with its reason in CONTEXT/hardening_results.md.
+[advisories]
+ignore = [
+  # zip 3.x: ZipArchive::extract / ZipStreamReader::extract only. Neither we nor our GridCraft
+  # call them: workbooks are read entry by entry in memory, nothing is extracted to disk.
+  # Fixed in zip 9, a major upgrade across GridCraft's xlsx crate; planned after go-live.
+  "RUSTSEC-2026-0367",
+  "RUSTSEC-2026-0368",
+  "RUSTSEC-2026-0369",
+  "RUSTSEC-2026-0429",
+]

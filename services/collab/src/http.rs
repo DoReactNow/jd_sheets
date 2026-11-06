@@ -30,8 +30,13 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(config: Config) -> AppState {
+        AppState::with_memory(config, Arc::new(crate::memory::CgroupProbe))
+    }
+
+    /// With a chosen memory probe (tests give fixed numbers, P4-LOAD-03).
+    pub fn with_memory(config: Config, memory: Arc<dyn crate::memory::MemoryProbe>) -> AppState {
         let app = crate::app_client::AppClient::new(&config.app_url, &config.internal_service_token);
-        let rooms = Arc::new(crate::rooms::Rooms::new(app, config.limits.clone()));
+        let rooms = Arc::new(crate::rooms::Rooms::with_memory(app, config.limits.clone(), memory));
         AppState {
             config: Arc::new(config),
             rooms,

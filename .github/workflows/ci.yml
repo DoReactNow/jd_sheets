@@ -71,6 +71,19 @@ jobs:
       - name: Prisma client
         run: npm run db:generate
 
+      - name: Dependency audit (production packages, high and critical; P4-SEC-02)
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: Rust dependency audit (collab service; P4-SEC-02)
+        # Fails on a known vulnerability; "unmaintained" notices are shown, logged in hardening_results.md.
+        working-directory: services/collab
+        run: cargo audit
+
       - name: Lint (ESLint, architecture, formatting, files guard)
         run: npm run lint
 

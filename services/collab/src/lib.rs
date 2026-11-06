@@ -16,6 +16,7 @@ pub mod engine;
 pub mod error;
 pub mod http;
 pub mod ip;
+pub mod memory;
 pub mod rooms;
 pub mod token;
 pub mod ws;

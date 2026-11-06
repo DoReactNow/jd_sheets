@@ -498,3 +498,112 @@ async fn twenty_editors_see_changes_within_300_ms() {
     );
     assert!(p95 < 300, "95th percentile {p95} ms");
 }
+
+// --- P4-LOAD-03: the memory guard ---------------------------------------------------------------
+
+const WB2: &str = "0190f5e0-0000-7000-8000-00000000000b";
+const MB: u64 = 1024 * 1024;
+
+async fn setup_with_memory(probe: jd_collab::memory::FixedProbe) -> (SocketAddr, AppState, Shared) {
+    let shared: Shared = Arc::new(Mutex::new(FakeApp {
+        version: "0190f5e0-0000-7000-8000-000000000001".into(),
+        bytes: jd_collab::engine::blank_workbook().unwrap(),
+        ..FakeApp::default()
+    }));
+    let app_url = fake_app(shared.clone()).await;
+    let vars: HashMap<String, String> = [
+        ("APP_ENV", "test"),
+        ("COLLAB_PORT", "47331"),
+        ("DATABASE_URL", "postgresql://u:p@127.0.0.1:47322/jdsheets_test"),
+        ("COLLAB_TOKEN_SECRET", SECRET),
+        ("INTERNAL_SERVICE_TOKEN", TOKEN),
+        ("APP_INTERNAL_URL", app_url.as_str()),
+    ]
+    .iter()
+    .map(|(k, v)| (k.to_string(), v.to_string()))
+    .collect();
+    let state = AppState::with_memory(Config::from_env(&vars).unwrap(), Arc::new(probe));
+    let app = router(state.clone()).into_make_service_with_connect_info::<SocketAddr>();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (address, state, shared)
+}
+
+async fn connect_to(address: SocketAddr, wb: &str, user: &str) -> Ws {
+    let (mut ws, _) = tokio_tungstenite::connect_async(format!("ws://{address}/collab/{wb}"))
+        .await
+        .unwrap();
+    let t = token(user, user, "EDITOR", wb, "127.0.0.1", now());
+    ws.send(Message::Text(json!({ "type": "auth", "token": t }).to_string().into()))
+        .await
+        .unwrap();
+    ws
+}
+
+async fn wait_for_rooms(state: &AppState, count: usize) {
+    for _ in 0..50 {
+        if state.rooms.count().await == count {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert_eq!(state.rooms.count().await, count);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn below_the_mark_workbooks_open_as_usual() {
+    let probe = jd_collab::memory::FixedProbe::new(100 * MB, 768 * MB);
+    let (address, state, _) = setup_with_memory(probe).await;
+    let (_a, _) = join(address, "u1", "Asha", "EDITOR").await;
+    let mut b = connect_to(address, WB2, "u2").await;
+    next_of(&mut b, "welcome").await;
+    assert_eq!(state.rooms.count().await, 2);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn near_the_limit_an_idle_workbook_is_unloaded_first_after_saving_its_version() {
+    let probe = jd_collab::memory::FixedProbe::new(100 * MB, 768 * MB);
+    let (address, state, shared) = setup_with_memory(probe.clone()).await;
+    {
+        let (mut a, _) = join(address, "u1", "Asha", "EDITOR").await;
+        send(
+            &mut a,
+            json!({ "type": "command", "clientCommandId": "a-1", "baseSeq": 0, "step": step("B2", "42") }),
+        )
+        .await;
+        next_of(&mut a, "applied").await;
+        a.close(None).await.unwrap();
+    }
+    probe.set_used(700 * MB);
+    let mut b = connect_to(address, WB2, "u2").await;
+    next_of(&mut b, "welcome").await;
+    wait_for_rooms(&state, 1).await;
+    assert!(
+        shared.lock().unwrap().snapshots >= 1,
+        "the idle workbook's changes were saved as a version before it was unloaded"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn near_the_limit_with_nothing_idle_a_new_workbook_is_refused_and_open_ones_keep_working() {
+    let probe = jd_collab::memory::FixedProbe::new(100 * MB, 768 * MB);
+    let (address, state, _) = setup_with_memory(probe.clone()).await;
+    let (mut a, _) = join(address, "u1", "Asha", "EDITOR").await;
+    probe.set_used(700 * MB);
+    let mut b = connect_to(address, WB2, "u2").await;
+    assert_eq!(
+        closed_with(&mut b).await,
+        1011,
+        "busy: the page falls back to one editor at a time"
+    );
+    assert_eq!(state.rooms.count().await, 1);
+    // The open workbook is never dropped, and others can still join it.
+    send(
+        &mut a,
+        json!({ "type": "command", "clientCommandId": "a-1", "baseSeq": 0, "step": step("B2", "1") }),
+    )
+    .await;
+    next_of(&mut a, "applied").await;
+    let (_c, _) = join(address, "u3", "Chitra", "EDITOR").await;
+}

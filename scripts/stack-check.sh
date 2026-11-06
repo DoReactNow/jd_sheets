@@ -98,6 +98,28 @@ check "/internal/* is 404 from outside (P4-SEC-03)" test "$(get "$(url /internal
 PUBLISHED="$(docker ps --filter label=com.docker.compose.project=jdsheets --format '{{.Names}} {{.Ports}}' | grep -E '0\.0\.0\.0|\[::\]' || true)"
 check "no JD Sheets container publishes a port (P4-SEC-03)" test -z "$PUBLISHED"
 
+echo "== Logs hold no secrets (P4-OBS-02)"
+ORIGIN="Origin: https://$DOMAIN"
+curl -sk -o /dev/null -H "Host: $DOMAIN" -H "$ORIGIN" -H 'content-type: application/json' \
+  -d '{"email":"admin@jdfusion.in","password":"Wrong-Secret-Value-77"}' "$(url /api/auth/sign-in)"
+TOKEN="$(curl -sk -D - -o /dev/null -H "Host: $DOMAIN" -H "$ORIGIN" -H 'content-type: application/json' \
+  -d '{"email":"admin@jdfusion.in","password":"Ci-Admin-Password-2026!"}' "$(url /api/auth/sign-in)" |
+  tr -d '\r' | sed -n 's/^set-cookie: [^=]*=\([^;]*\);.*/\1/Ip' | head -n 1)"
+check "the Super Admin can sign in (session cookie issued)" test -n "$TOKEN"
+check "the session cookie is Secure and HttpOnly" bash -c 'curl -sk -D - -o /dev/null -H "Host: $1" -H "Origin: https://$1" \
+  -H "content-type: application/json" -d "{\"email\":\"admin@jdfusion.in\",\"password\":\"Ci-Admin-Password-2026!\"}" \
+  "https://127.0.0.1:8443/api/auth/sign-in" | grep -i "^set-cookie:" | grep -qi "secure" ' _ "$DOMAIN"
+LOGS="$WORK/all-logs.txt"
+for c in $(docker ps -aq --filter label=com.docker.compose.project=jdsheets); do docker logs "$c" >>"$LOGS" 2>&1; done
+leaks=()
+for value in "Ci-Admin-Password-2026!" "Wrong-Secret-Value-77" "$TOKEN" "$PG" \
+  "$(sed -n 's/^AUTH_SECRET="\(.*\)"/\1/p' "$JD_DIR/.env.production")" \
+  "$(sed -n 's/^COLLAB_TOKEN_SECRET="\(.*\)"/\1/p' "$JD_DIR/.env.production")" \
+  "$(sed -n 's/^INTERNAL_SERVICE_TOKEN="\(.*\)"/\1/p' "$JD_DIR/.env.production")"; do
+  [ -n "$value" ] && grep -qF -- "$value" "$LOGS" && leaks+=("${value:0:4}...")
+done
+check "no password, session, database password or secret in any log (${#leaks[@]} found)" test "${#leaks[@]}" = 0
+
 echo "== Client address: only Traefik may set it (P1-NET-16)"
 sed -i 's|^EDGE_ALLOWED_CIDRS=.*|EDGE_ALLOWED_CIDRS="203.0.113.9/32"|' "$JD_DIR/.env.production"
 JDSHEETS_TAG="$TAG" docker compose -p jdsheets --env-file "$JD_DIR/.env.production" \

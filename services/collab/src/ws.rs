@@ -107,6 +107,11 @@ async fn serve(state: AppState, workbook_id: String, ip: Option<std::net::IpAddr
     // 2. The workbook's room.
     let room = match state.rooms.open(&workbook_id).await {
         Ok(room) => room,
+        Err(error) if error == rooms::BUSY => {
+            // The page falls back to one editor at a time, as when the service is down.
+            close_with(&mut socket, close::UNAVAILABLE, rooms::BUSY).await;
+            return;
+        }
         Err(error) => {
             tracing::error!(workbook = %workbook_id, %error, "could not open a live workbook");
             close_with(&mut socket, close::UNAVAILABLE, "unavailable").await;

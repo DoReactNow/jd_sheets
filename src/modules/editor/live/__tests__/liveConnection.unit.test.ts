@@ -1,6 +1,7 @@
 // The page's live connection (W-309): P3-WS-01, -03, -05, -08, P3-FALLBACK-01, P3-PRES-01, with a
 // scripted fake socket.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { parseInstant } from "@/shared/time";
 import {
   createLiveConnection,
   FIRST_CONNECT_MS,
@@ -69,7 +70,7 @@ function setup(
       setTimeout: (fn, ms) => setTimeout(fn, ms),
       clearTimeout: (h) => clearTimeout(h as number),
     },
-    now: () => Date.parse("2026-11-06T10:00:00Z"),
+    now: () => parseInstant("2026-11-06T10:00:00Z").getTime(),
   };
   const connection = createLiveConnection(deps);
   return { connection, sockets, states, workbooks, server, deps };

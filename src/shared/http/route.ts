@@ -12,7 +12,12 @@ import { parseInput, toErrorResponse } from "@/shared/errors/toErrorResponse";
 import { logger as rootLogger, type Logger } from "@/shared/logger";
 import { checkNetwork, recordOutsideAccess } from "@/shared/http/networkGuard";
 import { readSessionToken } from "@/shared/http/sessionCookie";
-import { checkAccess, requiredPermissions, type Access } from "@/shared/rbac/guard";
+import {
+  checkAccess,
+  mayWorkFromAnyNetwork,
+  requiredPermissions,
+  type Access,
+} from "@/shared/rbac/guard";
 import type { Principal } from "@/shared/rbac/principal";
 import { resolvePrincipal } from "@/shared/rbac/principalResolver";
 import {
@@ -170,7 +175,7 @@ export function route<T, I = undefined, P extends object = Record<string, string
       if (!internal) assertSameOrigin(request);
       const principal = internal ? null : await resolvePrincipal(request);
       if (outside && options.network !== "sign-in") {
-        if (!principal?.bypassesAccess) throw new AppError("NETWORK_BLOCKED");
+        if (!mayWorkFromAnyNetwork(principal)) throw new AppError("NETWORK_BLOCKED");
         await recordOutsideAccess({ userId: principal.userId, ...outside });
       }
       const decision = checkAccess(options.access, principal, {

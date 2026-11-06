@@ -2,7 +2,7 @@
 // these before rendering; the API has the same checks in route().
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { can } from "@/shared/rbac/guard";
+import { can, mayWorkFromAnyNetwork } from "@/shared/rbac/guard";
 import type { PermissionCode } from "@/shared/rbac/permissionRegistry";
 import type { Principal } from "@/shared/rbac/principal";
 import { resolvePrincipal } from "@/shared/rbac/principalResolver";
@@ -21,7 +21,7 @@ export async function pageNetworkAllowed(): Promise<boolean> {
   const decision = await checkNetwork({ headers: all, method: "GET", path });
   if (decision.allowed || OPEN_TO_EVERY_NETWORK.has(path)) return true;
   const principal = await resolvePrincipal({ headers: all });
-  if (!principal?.bypassesAccess) return false;
+  if (!mayWorkFromAnyNetwork(principal)) return false;
   await recordOutsideAccess({ userId: principal.userId, ip: decision.ip, path });
   return true;
 }

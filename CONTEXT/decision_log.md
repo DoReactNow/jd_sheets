@@ -975,3 +975,29 @@ Because office addresses change, a change can leave everyone outside the allowed
 - **Logs:** Docker log rotation (10 MB × 5 files per container); logs stay free of secrets and workbook content (P4-OBS-02).
 - **Deploys:** `deploy.sh <tag>`: a fresh local backup, then migrations; if they fail, the old version keeps running. Then the new containers start and must turn healthy, otherwise the previous tag is started again. A Hostinger snapshot before risky deploys is recommended, not required.
 
+
+---
+
+### Decision 62: What the Server Check Found; the Proxy Layout (W-401)
+
+**Date:** 2026-11-06
+**Status:** Accepted for the proxy layout; memory and SSH wait for the owner (marked *pending*)
+
+#### Found (read-only check, 2026-11-06)
+- Ubuntu 24.04.4, 2 vCPUs, Docker 29.6, Compose 5.3. Disk: 36 GB used, 61 GB free.
+- **The server is much busier than Decision 59 assumed:** about 33 containers, about 15 apps. Besides n8n and the CRM (`jd_crm`, maintained from another GitHub account, `kashishkami`), it runs JD Connect with Zulip, Hostinger's Hermes agent and several of the owner's own apps (`mrremind`, `junkyard_gold`, `goalfather` and others), each with its own Postgres.
+- **Memory is tight:** 7.8 GB total, 2.8 GB available, and **3.3 GB of the 4 GB swap in use**.
+- **Traefik owns ports 80 and 443** (`root-traefik-1`, from Hostinger's n8n template, in `/root`). It reads Docker labels (`exposedbydefault=false`), issues Let's Encrypt certificates with the `mytlschallenge` resolver (HTTP challenge), and redirects HTTP to HTTPS. Its network is `root_default`.
+- No firewall: `ufw` is inactive and the Hostinger firewall has no rules. Publicly listening: 22 (SSH), 80, 443, and 32768 (Hostinger's Hermes agent).
+- SSH: root login allowed; `PasswordAuthentication` appears as both `yes` and `no` in the config files, so the effective value needs `sshd -T`. Opening Hostinger's browser terminal appears to add a key to `/root/.ssh/authorized_keys`.
+- Gmail SMTP (port 465) is reachable.
+- The server already pulls from `ghcr.io/doreactnow/…` (`junkyard_gold`), so a registry login for the owner's GitHub account may already exist.
+
+#### Decision
+- **Proxy:** Traefik stays the front door. JD Sheets' Caddy publishes **no port**. It joins the `root_default` network with Traefik labels for `Host(\`sheets.jdfusion.in\`)` on `websecure` with the `mytlschallenge` resolver. Traefik handles HTTPS and renewal (P4-DEPLOY-03). Caddy keeps its tested job: internal routes 404, `/collab/*` to the Rust service, compression, the blocked page.
+  - **Client address:** Traefik does not trust forwarded headers from the internet (the default), so it sets `X-Forwarded-For` to the real client. Caddy must trust only the Docker network (`trusted_proxies`), so that it keeps that address instead of replacing it with Traefik's. `TRUSTED_PROXY_HOPS="2"`. W-404 tests this, including a spoofed header sent from outside (Rule 5).
+  - Only our Caddy joins `root_default`; the database, app, worker and Rust service stay on JD Sheets' own network.
+- **JD Sheets' own stack publishes no ports at all.** P4-SEC-04 for JD Sheets is met by that; the server-wide firewall and SSH settings are the owner's choice because they affect every app (see below).
+- **Install folder:** `/opt/jdsheets`, like the other apps.
+- **Memory (*pending*):** the Decision 61 limits add up to 2.56 GB, almost all that is free. Plan: start with tighter limits (Postgres 384 MB, app 640 MB, worker 192 MB, Rust service 768 MB, about 2 GB at most; normal use well below), and let the load test (W-409) decide. If the server cannot carry 20 live editors without pushing the other apps into swap, the options are a bigger Hostinger plan or a separate small VPS for JD Sheets. That is the owner's call, after the numbers.
+- **Server-wide recommendations (*pending*, owner's call):** a Hostinger firewall allowing only 22, 80 and 443 (and 32768 only if the Hermes agent is used); SSH with keys only. Before changing SSH, check that the CRM and JD Connect developer does not log in with a password.

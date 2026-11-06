@@ -520,9 +520,10 @@ Detailed work items are written when each phase starts (Decision 36).
 **Scenario coverage:** every Phase 4 scenario maps to an item below. New: P4-MAIL-01..03 (the real mailer, Decision 60). Carried from Phase 2: the fresh-clone drill (now CI building the images from a clean checkout, W-404) and P1-NET-16 (Caddy's blocked page with a closed allowlist, checked in CI in W-404; production keeps the allowlist open, Decision 57). Nothing is moved out of Phase 4.
 
 #### W-401: Server check and the proxy choice (owner, read-only)
-- [ ] The owner pastes the read-only check (`runbook.md`, "Server check") and sends back the output
-- [ ] Decide the proxy layout (Decision 61): existing proxy in front, or Caddy on 80/443; `TRUSTED_PROXY_HOPS`; whether Gmail's port 465 is reachable; free memory and disk. Logged as a decision
-- [ ] Settle SSH (P4-SEC-04): who else logs in over SSH, and whether password login can be turned off
+- [x] The owner pastes the read-only check (`runbook.md`, "Server check") and sends back the output (2026-11-06)
+- [x] Decide the proxy layout (Decision 62: behind the existing Traefik, no published ports); Gmail's port 465 reachable; memory tight (2.8 GB free, swap mostly used)
+- [ ] Settle SSH and the firewall with the owner (P4-SEC-04): effective `sshd -T` values, who else logs in, Hostinger firewall rules
+- [ ] Owner's answer on memory: if the load test shows the server is too small, bigger plan or separate VPS
 
 #### W-402: The real mailer (P4-MAIL-01..03)
 - [ ] RED tests: the `smtp` driver passes the existing mailer contract suite against a local SMTP test server (P4-MAIL-01); wrong password or Gmail down → the `identity.sendOtp` job retries, then fails with a log line that holds no password or code (P4-MAIL-02); production refuses `MAIL_DRIVER=fake` and a missing SMTP setting (P4-MAIL-03)
@@ -537,7 +538,7 @@ Detailed work items are written when each phase starts (Decision 36).
 #### W-404: Production images in CI and the production compose file
 - [ ] RED check (extends `scripts/docker-check.mjs`): the production compose file has memory limits per Decision 61, log rotation, read-only containers, a health check for every service (the worker gets one), no published ports except the edge, images by tag; the stack starts healthy from a clean checkout; Caddy's blocked page with a closed allowlist (P1-NET-16)
 - [ ] GitHub Actions: on `main`, build `app`, `worker`, `collab`, `migrator` and `ops` images for `linux/amd64`, tag with the commit, push to the private GitHub container registry
-- [ ] Compose variants for both proxy layouts of W-401 (only the chosen one is used)
+- [ ] Behind Traefik (Decision 62): Caddy on `root_default` with Traefik labels, no published ports, `trusted_proxies` for the Docker network, `TRUSTED_PROXY_HOPS=2`; tests for the client address with a spoofed `X-Forwarded-For` from outside
 
 #### W-405: Rust service memory guard (P4-LOAD-03)
 - [ ] RED tests (Rust): above a high-water mark the service unloads idle workbooks first (saving any due version), then refuses to open another with a friendly "busy, try again shortly" code; open sessions are never dropped; memory measured through a `Clock`-style probe so tests do not need real memory pressure
@@ -567,7 +568,7 @@ Detailed work items are written when each phase starts (Decision 36).
 #### W-410: Go-live setup on the server (owner, guided; P4-SEC-04, -05, P4-DEPLOY-03)
 - [ ] Hostinger snapshot first. Hostinger firewall: 80 and 443 open; 22 per W-401
 - [ ] GitHub token (read packages only) and `ops/setup.sh`; the owner types the app password, the Super Admin password and the backup passphrase
-- [ ] Proxy route for `sheets.jdfusion.in`; HTTPS certificate issued, renewal automatic (P4-DEPLOY-03)
+- [ ] Traefik picks up `sheets.jdfusion.in` from the labels; HTTPS certificate issued, renewal automatic (P4-DEPLOY-03)
 - [ ] First `deploy.sh`; `db:sync-rbac`; private seed (`amit@jdfusion.in`, `103.144.119.117/32`); seed password removed from the env file
 - [ ] Google Drive authorisation for rclone (the owner approves in their own browser); first backup visible in Drive (P4-BACKUP-01); timers on
 

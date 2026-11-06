@@ -1,0 +1,345 @@
+//! Live co-editing (JD Sheets, Decisions 22, 55, 56). Every change a person makes is captured as
+//! a [`LiveStep`]: the command, its parameters, and the sheet and selection it ran on, the way the
+//! macro recorder keeps steps. Another session (the server's, or another person's editor) runs
+//! the same step with [`apply`] and ends with the same workbook.
+//!
+//! A paste reads the person's own clipboard, which nobody else has, so a step that pastes carries
+//! the copied cells ([`LiveClipboard`]) and [`apply`] uses them instead of the local clipboard.
+//! Commands that only change what a person looks at (sheet tabs, selection, zoom, windows) are
+//! never captured.
+
+use std::sync::Arc;
+
+use gridcraft_core::{CellRef, RangeRef};
+use gridcraft_model::{Cell, Formula, Workbook};
+use serde::{Deserialize, Serialize};
+use serde_json::Value as Json;
+
+use crate::{Clipboard, EngineError, Result, Selection, Session, Trust};
+
+/// One change, as it ran.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveStep {
+    /// The active sheet (index and name) just before the command ran.
+    pub sheet: usize,
+    pub sheet_name: String,
+    /// The selection just before the command ran.
+    pub selection: Selection,
+    pub id: String,
+    pub params: Json,
+    /// The copied cells, for a step that pastes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clipboard: Option<LiveClipboard>,
+}
+
+/// The copied cells a paste uses: one sheet holding only the copied range.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveClipboard {
+    pub wb: Workbook,
+    pub sheet: usize,
+    pub range: RangeRef,
+    pub selected: RangeRef,
+    pub cut: bool,
+    pub text: String,
+    pub areas: Vec<RangeRef>,
+}
+
+/// Why a step could not be applied.
+#[derive(Debug)]
+pub enum ApplyError {
+    /// Its sheet is gone or was renamed (someone deleted it): the editor resyncs.
+    SheetGone,
+    /// The command itself refused (for example a protected sheet); the workbook is unchanged.
+    Refused(String),
+}
+
+/// Capture state on a session ([`Session::live`]).
+#[derive(Debug, Default)]
+pub struct Capture {
+    /// Steps captured since the host last took them.
+    pub steps: Vec<LiveStep>,
+    /// True while [`apply`] runs someone else's step: it is not captured again.
+    pub applying: bool,
+    /// This person's own changes, for undo (Decision 56): the cells each one changed, or `None`
+    /// for a change undo can't reverse while others edit (rows, sheets, merges…).
+    pub undo: Vec<Option<CellPatch>>,
+    pub redo: Vec<Option<CellPatch>>,
+    /// True while undo or redo runs, so its own restore step doesn't touch the stacks.
+    restoring: bool,
+}
+
+/// The cells one change touched on one sheet: (cell, before, after).
+#[derive(Clone, Debug, PartialEq)]
+pub struct CellPatch {
+    pub sheet_name: String,
+    pub cells: Vec<(CellRef, Option<Cell>, Option<Cell>)>,
+}
+
+/// Shown when undo can't reverse a change while others edit.
+pub const CANT_UNDO: &str = "This change can't be undone while others are editing.";
+
+/// A formula read from JSON has no parsed form; give it one, as entering it would.
+fn rehydrate(cell: &mut Cell) {
+    if let Some(f) = cell.formula.as_mut()
+        && f.expr.is_none()
+    {
+        let parsed = Formula::new(&f.text).expr;
+        Arc::make_mut(f).expr = parsed;
+    }
+}
+
+fn rehydrate_workbook(wb: &mut Workbook) {
+    for sheet in wb.sheets.iter_mut() {
+        let sheet = Arc::make_mut(sheet);
+        let cells: Vec<CellRef> = sheet.cells.iter().filter(|(_, c)| c.formula.as_ref().is_some_and(|f| f.expr.is_none())).map(|(c, _)| c).collect();
+        for c in cells {
+            if let Some(cell) = sheet.cells.get_mut(c) {
+                rehydrate(cell);
+            }
+        }
+    }
+}
+
+/// The cells `id` changed on one sheet, when that is all it changed; `None` otherwise.
+fn patch_of(before: &Workbook, after: &Workbook) -> Option<CellPatch> {
+    if before.sheets.len() != after.sheets.len() || before.names != after.names {
+        return None;
+    }
+    let mut found: Option<CellPatch> = None;
+    for (b, a) in before.sheets.iter().zip(&after.sheets) {
+        if Arc::ptr_eq(b, a) {
+            continue;
+        }
+        if b.name != a.name {
+            return None;
+        }
+        // Anything but cell content and computed values changed: not a cell edit.
+        let mut b_rest = (**b).clone();
+        let mut a_rest = (**a).clone();
+        b_rest.cells = Default::default();
+        a_rest.cells = Default::default();
+        b_rest.spill = Default::default();
+        a_rest.spill = Default::default();
+        b_rest.spill_ranges = Default::default();
+        a_rest.spill_ranges = Default::default();
+        if b_rest != a_rest {
+            return None;
+        }
+        let changed = b.cells.diff(&a.cells);
+        if changed.is_empty() {
+            continue;
+        }
+        // Formula results recalculated elsewhere are not part of the edit; only cells whose
+        // content (value typed, formula text, style) changed.
+        let edited: Vec<_> = changed
+            .into_iter()
+            .filter_map(|c| {
+                let (x, y) = (b.cells.get(c), a.cells.get(c));
+                let content = |cell: Option<&Cell>| cell.map(|k| (k.formula.as_ref().map(|f| f.text.clone()), if k.formula.is_some() { None } else { Some(k.value.clone()) }, k.style));
+                (content(x) != content(y)).then(|| (c, x.cloned(), y.cloned()))
+            })
+            .collect();
+        if edited.is_empty() {
+            continue;
+        }
+        if found.is_some() {
+            return None; // two sheets changed: keep it simple, not undoable live
+        }
+        found = Some(CellPatch { sheet_name: b.name.clone(), cells: edited });
+    }
+    found
+}
+
+/// Commands that only change what this person looks at, never sent.
+const VIEW_ONLY: &[&str] = &["selection.", "sheet.activate", "sheet.next", "sheet.previous", "window.", "view.", "ui."];
+
+/// Commands that read the clipboard, so their step carries it.
+fn reads_clipboard(id: &str) -> bool {
+    id.starts_with("edit.paste") || id.contains("Paste") || id == "home.insertCopiedCells"
+}
+
+pub(crate) fn is_view_only(id: &str) -> bool {
+    VIEW_ONLY.iter().any(|p| if p.ends_with('.') { id.starts_with(p) } else { id == *p })
+}
+
+/// The clipboard as a step can carry it: only the copied sheet, only the copied cells.
+pub(crate) fn carry(clip: &Clipboard) -> Option<LiveClipboard> {
+    let mut wb = (*clip.wb).clone();
+    let source = wb.sheets.get(clip.sheet)?.clone();
+    let mut sheet = (*source).clone();
+    let keep = clip.range;
+    let outside: Vec<_> = sheet.cells.iter().map(|(c, _)| c).filter(|c| !keep.contains(*c)).collect();
+    for c in outside {
+        sheet.cells.remove(c);
+    }
+    sheet.comments.retain(|c, _| keep.contains(*c));
+    wb.sheets = vec![Arc::new(sheet)];
+    Some(LiveClipboard {
+        wb,
+        sheet: 0,
+        range: clip.range,
+        selected: clip.selected,
+        cut: clip.cut,
+        text: clip.text.clone(),
+        areas: clip.areas.clone(),
+    })
+}
+
+impl Session {
+    /// Starts capturing this session's changes as live steps.
+    pub fn start_live(&mut self) {
+        self.live = Some(Capture::default());
+    }
+
+    /// The steps captured since the last call.
+    pub fn take_live_steps(&mut self) -> Vec<LiveStep> {
+        self.live.as_mut().map(|c| std::mem::take(&mut c.steps)).unwrap_or_default()
+    }
+
+    /// Called by `execute` after a top-level command succeeded and changed the workbook.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn capture_live(&mut self, sheet: usize, sheet_name: String, selection: Selection, id: &str, params: Json, clipboard: Option<LiveClipboard>, before: &Workbook, after: &Workbook) {
+        if is_view_only(id) {
+            return;
+        }
+        if let Some(capture) = self.live.as_mut()
+            && !capture.applying
+        {
+            capture.steps.push(LiveStep { sheet, sheet_name, selection, id: id.to_string(), params, clipboard });
+            if !capture.restoring {
+                capture.undo.push(patch_of(before, after));
+                capture.redo.clear();
+            }
+        }
+    }
+
+    /// Undo or redo of this person's own change while live (Decision 56): their cells go back to
+    /// what they were, where nobody has changed them since, as a step everyone receives.
+    pub(crate) fn live_undo(&mut self, redo: bool) -> Result<Json> {
+        let Some(capture) = self.live.as_mut() else { return Err(EngineError::Other(CANT_UNDO.into())) };
+        let stack = if redo { &mut capture.redo } else { &mut capture.undo };
+        let Some(entry) = stack.pop() else {
+            return Err(EngineError::Disabled(if redo { "edit.redo" } else { "edit.undo" }.into(), "Nothing to undo.".into()));
+        };
+        let Some(patch) = entry else { return Err(EngineError::Other(CANT_UNDO.into())) };
+        // Back to `before` (undo) or `after` (redo), only where the cell still holds the other.
+        let wanted: Vec<Json> = {
+            let doc = self.doc()?;
+            let Some(sheet) = doc.wb.sheets.iter().find(|s| s.name == patch.sheet_name) else {
+                return Err(EngineError::Other(CANT_UNDO.into()));
+            };
+            patch
+                .cells
+                .iter()
+                .filter(|(c, b, a)| {
+                    let expected = if redo { b } else { a };
+                    let now = sheet.cells.get(*c);
+                    let text = |x: Option<&Cell>| x.map(|k| (k.formula.as_ref().map(|f| f.text.clone()), k.style, if k.formula.is_some() { None } else { Some(k.value.clone()) }));
+                    text(now) == text(expected.as_ref())
+                })
+                .map(|(c, b, a)| serde_json::json!([c.a1(), if redo { a } else { b }]))
+                .collect()
+        };
+        if let Some(c) = self.live.as_mut() {
+            c.restoring = true;
+        }
+        let ran = self.execute("live.setCells", serde_json::json!({"sheet": patch.sheet_name, "cells": wanted}));
+        if let Some(c) = self.live.as_mut() {
+            c.restoring = false;
+            let other = if redo { &mut c.undo } else { &mut c.redo };
+            other.push(Some(patch));
+        }
+        ran
+    }
+
+    /// The clipboard a step would carry for command `id` (only for commands that paste).
+    pub(crate) fn live_clipboard_for(&self, id: &str) -> Option<LiveClipboard> {
+        if self.live.is_none() || !reads_clipboard(id) {
+            return None;
+        }
+        self.clipboard.as_ref().and_then(carry)
+    }
+}
+
+/// Runs someone else's step on the active document of `s`, as it ran for them.
+pub fn apply(s: &mut Session, step: &LiveStep) -> std::result::Result<Json, ApplyError> {
+    {
+        let doc = s.doc_mut().map_err(|e| ApplyError::Refused(e.to_string()))?;
+        let same = doc.wb.sheets.get(step.sheet).is_some_and(|sh| sh.name == step.sheet_name);
+        if !same {
+            return Err(ApplyError::SheetGone);
+        }
+        doc.wb.set_active_sheet(step.sheet);
+        doc.selection = step.selection.clone();
+    }
+    let own_clipboard = s.clipboard.take();
+    if let Some(carried) = &step.clipboard {
+        let doc_uid = s.doc().map(|d| d.uid).unwrap_or(0);
+        let mut wb = carried.wb.clone();
+        rehydrate_workbook(&mut wb);
+        s.clipboard = Some(Clipboard {
+            wb: Arc::new(wb),
+            sheet: carried.sheet,
+            range: carried.range,
+            selected: carried.selected,
+            cut: carried.cut,
+            doc_uid,
+            text: carried.text.clone(),
+            areas: carried.areas.clone(),
+            trust: Trust::FromFile,
+        });
+    }
+    let was_applying = s.live.as_ref().is_some_and(|c| c.applying);
+    if let Some(c) = s.live.as_mut() {
+        c.applying = true;
+    }
+    let result = s.execute(&step.id, step.params.clone());
+    if let Some(c) = s.live.as_mut() {
+        c.applying = was_applying;
+    }
+    s.clipboard = own_clipboard;
+    result.map_err(|e: EngineError| ApplyError::Refused(e.to_string()))
+}
+
+/// For a host that needs a plain result.
+pub fn apply_result(s: &mut Session, step: &LiveStep) -> Result<Json> {
+    apply(s, step).map_err(|e| match e {
+        ApplyError::SheetGone => EngineError::Other("That sheet was deleted by someone else.".into()),
+        ApplyError::Refused(why) => EngineError::Other(why),
+    })
+}
+
+/// `live.setCells {sheet, cells: [[a1, cell | null]]}`: puts cells back exactly as given (undo
+/// and redo while live). Formulas are parsed again and the workbook recalculates.
+pub(crate) fn set_cells(s: &mut Session, p: &Json) -> Result<Json> {
+    let name = p.get("sheet").and_then(Json::as_str).ok_or_else(|| EngineError::Other("live.setCells: missing sheet".into()))?;
+    let cells = p.get("cells").and_then(Json::as_array).cloned().unwrap_or_default();
+    crate::cmd::edit(s, |cx| {
+        let i = cx.wb.sheets.iter().position(|sh| sh.name == name).ok_or_else(|| EngineError::Other(CANT_UNDO.into()))?;
+        for entry in &cells {
+            let Some(at) = entry.get(0).and_then(Json::as_str).and_then(CellRef::parse) else { continue };
+            let cell: Option<Cell> = entry.get(1).cloned().and_then(|v| serde_json::from_value(v).ok());
+            let sheet = cx.sheet_mut(i)?;
+            match cell {
+                Some(mut cell) => {
+                    rehydrate(&mut cell);
+                    sheet.cells.set(at, cell);
+                }
+                None => {
+                    sheet.cells.remove(at);
+                }
+            }
+            cx.touch(i, at);
+        }
+        Ok(Json::Null)
+    })
+}
+
+pub(crate) fn specs() -> Vec<crate::cmd::CommandSpec> {
+    vec![crate::cmd::cmd!(noundo "live.setCells", "Restore cells", [], None, "{sheet, cells: [[a1, cell | null]]}", crate::cmd::has_doc, set_cells)]
+}
+
+#[cfg(test)]
+mod tests;

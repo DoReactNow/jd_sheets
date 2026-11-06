@@ -11,6 +11,7 @@ pub mod cf;
 mod chart_svg;
 mod clip_html;
 pub mod cmd;
+pub mod live;
 pub mod display;
 pub mod fill;
 pub mod io;
@@ -492,6 +493,8 @@ pub struct Session {
     /// The recording buffer while a recorder runs ([`Session::start_recording`]): top-level
     /// commands with the place they ran in, kept apart from the journal.
     pub recorder: Option<record::Recorder>,
+    /// Live co-editing capture (JD Sheets, [`live`]); None unless a host starts it.
+    pub live: Option<live::Capture>,
     /// How many `execute` calls are running (0 between top-level commands).
     depth: u32,
     /// The steps the last successful `automate.runScript` or `macro.run` ran while a recorder was
@@ -668,6 +671,10 @@ impl Session {
     /// unless an undo group is open on the document (the group then makes the step).
     /// Panics inside commands are caught and reported; the workbook is restored.
     pub fn execute(&mut self, id: &str, params: Json) -> Result<Json> {
+        // While live, undo and redo reverse only this person's own changes (JD Sheets, Decision 56).
+        if self.live.is_some() && self.depth == 0 && matches!(id, "edit.undo" | "edit.redo") {
+            return self.live_undo(id == "edit.redo");
+        }
         let spec = find_command(id).ok_or_else(|| EngineError::UnknownCommand(id.to_string()))?;
         if let Err(why) = (spec.enabled)(self) {
             return Err(EngineError::Disabled(id.to_string(), why));
@@ -713,10 +720,13 @@ impl Session {
             None => Vec::new(),
         };
         // The recorder keeps top-level calls with the place they ran in.
-        let place = (self.depth == 0 && self.recorder.is_some()).then(|| match self.active() {
+        let place = (self.depth == 0 && (self.recorder.is_some() || self.live.is_some())).then(|| match self.active() {
             Some(d) => (d.uid, d.wb.active_sheet(), d.wb.active().map(|sh| sh.name.clone()).unwrap_or_default(), d.selection.clone()),
             None => (0, 0, String::new(), Selection::default()),
         });
+        // Live co-editing: the place and, for a paste, the copied cells, taken before it runs.
+        let live_place = place.clone().filter(|_| self.live.is_some());
+        let live_clip = live_place.as_ref().and_then(|_| self.live_clipboard_for(id));
         let doc_uid = before.as_ref().map(|(uid, ..)| *uid);
         let requests_before = self.ui_requests.len();
         let marked = doc_uid.zip(start).map(|(uid, (_, len))| (uid, len));
@@ -781,6 +791,18 @@ impl Session {
         // command that succeeds keeps a group it opened (a debugger's start).
         if result.is_err() {
             self.rollback_groups_from(first_group);
+        }
+        // Live co-editing captures every top-level command that changed the workbook.
+        if let Some((_, sheet, sheet_name, selection)) = live_place
+            && result.is_ok()
+            && before.as_ref().is_some_and(|(uid, wb, _)| self.docs.iter().any(|d| d.uid == *uid && !Arc::ptr_eq(&d.wb, wb)))
+        {
+            let live_params = cmd::journal_params(&params);
+            let before_wb = before.as_ref().map(|(_, wb, _)| wb.clone());
+            let after_wb = self.active().map(|d| d.wb.clone());
+            if let (Some(b), Some(a)) = (before_wb, after_wb) {
+                self.capture_live(sheet, sheet_name, selection, id, live_params, live_clip, &b, &a);
+            }
         }
         if spec.journal && result.is_ok() {
             // A command that started recording is not part of the recording; one that stopped it

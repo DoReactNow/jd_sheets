@@ -5,12 +5,18 @@ import { AppError } from "@/shared/errors/AppError";
 import { parseInput } from "@/shared/errors/toErrorResponse";
 import { attachmentDisposition, readBodyLimited } from "@/shared/http/body";
 import type { HandlerResult, RawResult, RouteContext } from "@/shared/http/route";
-import { createWorkbookInput, ifMatchSchema, type CreateWorkbookInput } from "./workbooks.schemas";
+import {
+  createWorkbookInput,
+  ifMatchSchema,
+  listWorkbooksInput,
+  type CreateWorkbookInput,
+  type ListWorkbooksInput,
+} from "./workbooks.schemas";
 import { workbooksService } from "./workbooks.instance";
-import type { SavedVersionDto, WorkbookDto } from "./workbooks.types";
+import type { SavedVersionDto, WorkbookDto, WorkbookPageDto } from "./workbooks.types";
 
 /** Input schemas the routes declare (routes import only the controller, rule 2). */
-export const workbookSchemas = { create: createWorkbookInput };
+export const workbookSchemas = { create: createWorkbookInput, list: listWorkbooksInput };
 
 type Ctx<I = undefined> = RouteContext<I, { id: string }>;
 
@@ -22,9 +28,9 @@ function principalOf<I, P>(context: RouteContext<I, P>) {
 export const workbooksController = {
   /** GET /api/workbooks */
   async list(
-    context: RouteContext<undefined, Record<string, string>>,
-  ): Promise<HandlerResult<WorkbookDto[]>> {
-    return { data: await workbooksService().list(principalOf(context)) };
+    context: RouteContext<ListWorkbooksInput, Record<string, string>>,
+  ): Promise<HandlerResult<WorkbookPageDto>> {
+    return { data: await workbooksService().list(principalOf(context), context.input) };
   },
 
   /** POST /api/workbooks */
@@ -45,6 +51,7 @@ export const workbooksController = {
   /** GET /api/workbooks/:id/content: the current version's bytes, with its version as ETag. */
   async content(context: Ctx): Promise<RawResult> {
     const file = await workbooksService().openContent(context.params.id);
+    await workbooksService().recordOpen(principalOf(context), context.params.id);
     const name = `${file.title}.${APP_CONFIG.workbooks.extension}`;
     return {
       response: new Response(Readable.toWeb(file.body) as ReadableStream, {

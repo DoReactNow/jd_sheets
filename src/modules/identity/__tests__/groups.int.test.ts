@@ -101,7 +101,9 @@ describe("groups", () => {
     await createGroup("Finance");
     const again = await createGroup("FINANCE");
     expect(again.status).toBe(409);
-    expect((again.body as { error: { code: string } }).error.code).toBe("GROUP_NAME_TAKEN");
+    expect((again.body as unknown as { error: { code: string } }).error.code).toBe(
+      "GROUP_NAME_TAKEN",
+    );
     const html = await createGroup("<b>Ops</b>");
     expect(html.body!.data.name).toBe("<b>Ops</b>");
     expect((await createGroup("   ")).status).toBe(400);

@@ -22,3 +22,16 @@ export const ifMatchSchema = z
   .string({ error: "This save is missing the version it was based on." })
   .transform((value) => value.trim().replace(/^W\//, "").replace(/^"|"$/g, ""))
   .pipe(z.uuid({ error: "This save is missing the version it was based on." }));
+
+export const LIST_SCOPES = ["mine", "shared", "recent", "all", "trash"] as const;
+export type ListScope = (typeof LIST_SCOPES)[number];
+
+export const listWorkbooksInput = z.object({
+  scope: z.enum(LIST_SCOPES, { error: "Choose a list." }).default("mine"),
+  q: z.string().trim().max(MAX, { error: "That search is too long." }).optional(),
+  sort: z.enum(["updated", "title"], { error: "Choose a sort." }).default("updated"),
+  dir: z.enum(["asc", "desc"], { error: "Choose a direction." }).optional(),
+  cursor: z.string().max(400).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+});
+export type ListWorkbooksInput = z.output<typeof listWorkbooksInput>;

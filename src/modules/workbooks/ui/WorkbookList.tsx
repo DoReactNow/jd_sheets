@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiRequest } from "@/shared/api/client";
 import type { FriendlyError } from "@/shared/api/friendlyError";
 import { ErrorMessage } from "@/shared/ui/ErrorMessage";
-import type { WorkbookDto } from "../workbooks.types";
+import type { WorkbookDto, WorkbookPageDto } from "../workbooks.types";
 import { formatChanged, formatSize } from "./format";
 import styles from "./WorkbookList.module.css";
 
@@ -23,10 +23,10 @@ export function WorkbookList() {
   const [createError, setCreateError] = useState<FriendlyError | null>(null);
 
   const load = useCallback(async () => {
-    const result = await apiRequest<WorkbookDto[]>("/api/workbooks");
+    const result = await apiRequest<WorkbookPageDto>("/api/workbooks?scope=mine");
     setState(
       result.ok
-        ? { kind: "ready", workbooks: result.data }
+        ? { kind: "ready", workbooks: result.data.items }
         : { kind: "error", error: result.error },
     );
   }, []);

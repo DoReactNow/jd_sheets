@@ -144,9 +144,11 @@ describe("listing (P0-WB-02, X-ACCESS-06)", () => {
     await create("Ravi's");
     actAs(asha);
     await save(first.id, minimalXlsx({ A1: "1" }), `"${first.currentVersionId}"`);
-    const result = await callRoute<{ data: Wb[] }>(listRoute, { path: "/api/workbooks" });
-    expect(result.body!.data.map((w) => w.title)).toEqual(["First", "Second"]);
-    expect(result.body!.data.map((w) => w.id)).toEqual([first.id, second.id]);
+    const result = await callRoute<{ data: { items: Wb[] } }>(listRoute, {
+      path: "/api/workbooks",
+    });
+    expect(result.body!.data.items.map((w) => w.title)).toEqual(["First", "Second"]);
+    expect(result.body!.data.items.map((w) => w.id)).toEqual([first.id, second.id]);
   });
 });
 

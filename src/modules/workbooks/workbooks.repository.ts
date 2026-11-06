@@ -8,6 +8,8 @@ export interface WorkbookRow {
   id: string;
   title: string;
   ownerId: string | null;
+  owner: { id: string; displayName: string } | null;
+  trashedAt: Date | null;
   sizeBytes: bigint;
   createdAt: Date;
   updatedAt: Date;
@@ -27,11 +29,50 @@ const workbookSelect = {
   id: true,
   title: true,
   ownerId: true,
+  owner: { select: { id: true, displayName: true } },
+  trashedAt: true,
   sizeBytes: true,
   createdAt: true,
   updatedAt: true,
   currentVersion: { select: { id: true, number: true, storageKey: true, sizeBytes: true } },
 } as const;
+
+export interface ListQuery {
+  userId: string;
+  scope: "mine" | "shared" | "all" | "trash";
+  q?: string;
+  sort: "updated" | "title";
+  dir: "asc" | "desc";
+  /** Keyset position: the sort value and the id of the last row of the previous page. */
+  after?: { value: string; id: string };
+  limit: number;
+}
+
+/** Workbooks a person can read through a grant, a group or a link they opened (not owned). */
+const sharedWith = (userId: string) => Prisma.sql`(
+  EXISTS (SELECT 1 FROM sharing_grants g WHERE g.workbook_id = w.id AND g.user_id = ${userId}::uuid)
+  OR EXISTS (SELECT 1 FROM sharing_grants g JOIN identity_group_members m ON m.group_id = g.group_id
+             WHERE g.workbook_id = w.id AND m.user_id = ${userId}::uuid)
+  OR (w.link_role IS NOT NULL AND EXISTS (SELECT 1 FROM sharing_link_opens l
+             WHERE l.workbook_id = w.id AND l.user_id = ${userId}::uuid)))`;
+
+function scopeCondition(scope: ListQuery["scope"], userId: string): Prisma.Sql {
+  const live = Prisma.sql`w.trashed_at IS NULL AND w.current_version_id IS NOT NULL`;
+  switch (scope) {
+    case "mine":
+      return Prisma.sql`${live} AND w.owner_id = ${userId}::uuid`;
+    case "shared":
+      return Prisma.sql`${live} AND w.owner_id IS DISTINCT FROM ${userId}::uuid AND ${sharedWith(userId)}`;
+    case "all":
+      return Prisma.sql`${live} AND (w.owner_id = ${userId}::uuid OR ${sharedWith(userId)})`;
+    case "trash":
+      return Prisma.sql`w.trashed_at IS NOT NULL AND w.owner_id = ${userId}::uuid`;
+  }
+}
+
+function escapeLike(value: string): string {
+  return value.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
 
 /** Thrown inside the save transaction when the base version is no longer current. */
 export class StaleBaseVersionError extends Error {
@@ -71,6 +112,72 @@ export const workbooksRepository = {
   async ownerOf(id: string): Promise<string | null | undefined> {
     const row = await getPrisma().workbook.findUnique({ where: { id }, select: { ownerId: true } });
     return row === null ? undefined : row.ownerId;
+  },
+
+  /**
+   * One page of a list, ordered by the sort key and the id as a stable tie-breaker, using keyset
+   * positions so rows are never skipped or repeated (X-LIST-01, -05). Title sorting ignores case.
+   */
+  async listPage(query: ListQuery): Promise<WorkbookRow[]> {
+    const key =
+      query.sort === "title"
+        ? Prisma.sql`lower(w.title)`
+        : Prisma.sql`to_char(w.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US')`;
+    const cmp = query.dir === "asc" ? Prisma.sql`>` : Prisma.sql`<`;
+    const order = query.dir === "asc" ? Prisma.sql`ASC` : Prisma.sql`DESC`;
+    const conditions = [scopeCondition(query.scope, query.userId)];
+    if (query.q)
+      conditions.push(Prisma.sql`lower(w.title) LIKE ${`%${escapeLike(query.q.toLowerCase())}%`}`);
+    if (query.after) {
+      conditions.push(
+        Prisma.sql`(${key}, w.id) ${cmp} (${query.after.value}, ${query.after.id}::uuid)`,
+      );
+    }
+    const rows = await getPrisma().$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT w.id FROM workbooks_workbooks w
+      WHERE ${Prisma.join(conditions, " AND ")}
+      ORDER BY ${key} ${order}, w.id ${order}
+      LIMIT ${query.limit}`);
+    return this.findManyInOrder(rows.map((r) => r.id));
+  },
+
+  /** The person's recently opened workbooks they can still read, newest first (P2-LIST-03). */
+  async listRecent(userId: string, limit: number, q?: string) {
+    const conditions = [Prisma.sql`r.user_id = ${userId}::uuid`, scopeCondition("all", userId)];
+    if (q) conditions.push(Prisma.sql`lower(w.title) LIKE ${`%${escapeLike(q.toLowerCase())}%`}`);
+    const rows = await getPrisma().$queryRaw<Array<{ id: string; opened_at: Date }>>(Prisma.sql`
+      SELECT w.id, r.opened_at FROM workbooks_recent_opens r
+      JOIN workbooks_workbooks w ON w.id = r.workbook_id
+      WHERE ${Prisma.join(conditions, " AND ")}
+      ORDER BY r.opened_at DESC, w.id DESC
+      LIMIT ${limit}`);
+    const found = await this.findManyInOrder(rows.map((r) => r.id));
+    return found.map((row, i) => ({ row, openedAt: rows[i]!.opened_at }));
+  },
+
+  async findManyInOrder(ids: string[]): Promise<WorkbookRow[]> {
+    if (ids.length === 0) return [];
+    const rows = await getPrisma().workbook.findMany({
+      where: { id: { in: ids } },
+      select: workbookSelect,
+    });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return ids.map((id) => byId.get(id)).filter((row): row is WorkbookRow => row !== undefined);
+  },
+
+  /** Notes that the person opened the workbook; keeps only their newest `keep` entries. */
+  async recordOpen(userId: string, workbookId: string, now: Date, keep: number): Promise<void> {
+    await getPrisma().$transaction([
+      getPrisma().recentOpen.upsert({
+        where: { userId_workbookId: { userId, workbookId } },
+        create: { userId, workbookId, openedAt: now },
+        update: { openedAt: now },
+      }),
+      getPrisma().$executeRaw(Prisma.sql`
+        DELETE FROM workbooks_recent_opens WHERE user_id = ${userId}::uuid AND workbook_id NOT IN (
+          SELECT workbook_id FROM workbooks_recent_opens WHERE user_id = ${userId}::uuid
+          ORDER BY opened_at DESC, workbook_id DESC LIMIT ${keep})`),
+    ]);
   },
 
   listOwnedBy(ownerId: string): Promise<WorkbookRow[]> {

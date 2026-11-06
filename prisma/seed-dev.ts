@@ -62,7 +62,10 @@ async function main(): Promise<void> {
     },
   });
   const principal = buildPrincipal(asha, null);
-  const existing = await workbooksService().list(principal);
+  const existing = await prisma.workbook.findMany({
+    where: { ownerId: asha.id },
+    select: { title: true },
+  });
   for (const sample of SAMPLES) {
     if (existing.some((workbook) => workbook.title === sample.title)) continue;
     const bytes = new Uint8Array(readFileSync(path.join(process.cwd(), "golden", sample.file)));

@@ -606,10 +606,10 @@ App lists (approval queue, shared with me) refresh on focus and by light polling
 
 ---
 
-### Decision 41: Open: Production Domain and Backup Target
+### Decision 41: Production Domain and Backup Target
 
 **Date:** 2026-11-06
-**Status:** Open (needed by Phase 4)
+**Status:** Resolved by Decisions 59 and 60 (owner's answers, 2026-11-06)
 - The domain or subdomain (for example `sheets.jdfusion.in`) and who manages its DNS.
 - Where nightly backups go (for example Google Drive, Backblaze B2, or a second VPS).
 
@@ -935,3 +935,43 @@ Because office addresses change, a change can leave everyone outside the allowed
   - The IP allowlist then lives in the app's network rules (already the real wall, Decision 46) rather than in Caddy.
 - **Memory:** with 61% already used, JD Sheets' containers get memory limits. Rough budget: Postgres 512 MB, app 768 MB, worker 256 MB, Rust service 1 GB (P4-LOAD-03). The load test checks the whole server stays healthy.
 - **Hostinger snapshots** are a useful extra before each deploy, but not a replacement for the encrypted off-server backup.
+
+---
+
+### Decision 60: Phase 4 Owner Answers, Part 2 (accounts, office, access)
+
+**Date:** 2026-11-06
+**Status:** Accepted (owner's answers; amends Decisions 47 and 59)
+
+#### Decision
+- **DNS done:** an A record `sheets.jdfusion.in` → `82.29.165.21` (the Hostinger VPS, the same address as `crm.jdfusion.in`). Checked with `dig` on 2026-11-06.
+- **One Google account for everything outside the app:** `JDSheetsByAdam@gmail.com`.
+  - It sends the sign-up codes (Gmail SMTP with an app password; the owner has created the app password). This replaces the company account of Decisions 47 and 59: `jdfusion.in` mailboxes are webmail, not Google.
+  - It receives the alerts.
+  - Its Google Drive holds the encrypted backups.
+  - Staff still sign up with `@jdfusion.in` addresses only (Decision 12); only the sender is a Gmail address. Gmail's limit (about 500 messages a day) is far above what 30 staff need.
+- **First Super Admin:** `amit@jdfusion.in` (`SEED_SUPER_ADMIN_EMAIL`). The owner types the password on the server.
+- **First allowed network:** one office, `103.144.119.117/32` (`BOOTSTRAP_ALLOWED_CIDRS`). The other locations are added by the owner on the Network access page after go-live. Whether this address is static is not known: if it changes, staff are blocked until a Super Admin adds the new one (Super Admins work from anywhere, Decision 57), and `admin:reset-ip-rules` stays the last resort.
+- **Server access:** the owner uses Hostinger's browser terminal. Each server step is a short copy-and-paste command; output is pasted back to Claude.
+- **Backup passphrase:** chosen by the owner, kept in their password manager and on paper, typed on the server by the owner. Claude never sees it. If it is lost, the backups cannot be opened.
+- **Secrets never pass through chat:** the app password, the backup passphrase, the Super Admin password, the GitHub token and the Google Drive authorisation are typed or pasted by the owner on the server.
+- TQ-10 is fully answered (Decisions 56 and 59).
+
+---
+
+### Decision 61: Phase 4 Technical Approach
+
+**Date:** 2026-11-06
+**Status:** Proposed with the Phase 4 plan (accepted when the owner approves the plan)
+
+#### Decision
+- **Images are built by GitHub Actions, not on the server.** The VPS is shared (n8n, the CRM) and has 2 vCPUs; building Rust and the 24 MB editor there would take a long time and starve the other services. CI builds `linux/amd64` images, tags them with the commit, and pushes them to GitHub's container registry (private). The server only pulls. Rolling back means starting the previous tag (P4-DEPLOY-02).
+  - Everything else the server needs (compose file, Caddyfile, ops scripts) ships in a small `ops` image of the same tag, so the server needs **one credential**: a GitHub token that can only read packages. No repository clone on the server.
+- **Proxy:** decided after the read-only server check (W-401). If another proxy (Traefik from Hostinger's n8n template, or nginx) already owns ports 80 and 443, our Caddy publishes **no public port**: the existing proxy sends `sheets.jdfusion.in` to it and handles HTTPS, and `TRUSTED_PROXY_HOPS` becomes 2. If nothing owns them, Caddy takes 80 and 443 as planned. Either way the edge allowlist stays open (Decision 57) and the app's network rules are the wall.
+- **Mail:** a real `smtp` mail driver (Gmail, port 465, TLS) behind the existing `Mailer` interface. Tests use a local SMTP test server, never Gmail (Rule 12).
+- **Backups:** a nightly host job (systemd timer, 02:30 IST): a Postgres dump and the workbook files, encrypted with GnuPG (AES-256, the owner's passphrase in a root-only file), kept 7 days on the VPS and 30 days on Google Drive (rclone, limited to files it created). A failure emails an alert. A restore script brings everything back on a fresh machine.
+- **Monitoring and alerts:** a host check every 5 minutes: container health (app, worker, collab, db), disk and memory, certificate days left, age of the last good backup. It emails `JDSheetsByAdam@gmail.com` once when a problem starts and once when it clears. Optional: a free outside check (for example healthchecks.io) that emails when the server itself stops reporting.
+- **Memory limits** (Decision 59 budget): Postgres 512 MB, app 768 MB, worker 256 MB, Rust service 1 GB. The Rust service unloads idle workbooks first when near its limit, and refuses to open more with a friendly "busy" message rather than being killed (P4-LOAD-03). The load test may adjust these numbers.
+- **Logs:** Docker log rotation (10 MB × 5 files per container); logs stay free of secrets and workbook content (P4-OBS-02).
+- **Deploys:** `deploy.sh <tag>`: a fresh local backup, then migrations; if they fail, the old version keeps running. Then the new containers start and must turn healthy, otherwise the previous tag is started again. A Hostinger snapshot before risky deploys is recommended, not required.
+

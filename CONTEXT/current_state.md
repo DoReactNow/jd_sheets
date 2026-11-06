@@ -21,7 +21,7 @@ The source of truth for what is done and what is next. **Check this file first i
 | 1 | Identity, access and the IP wall | Sign-in, sign-up with OTP, approval queue, admin user screens, network rules, blocked page, audit trail | **DONE** (2026-11-06, built and tested locally; pull request open) |
 | 2 | Workbooks complete and sharing | Share dialog with four roles, view and comment modes, edit lease, version history and restore, autosave, import/export, trash, groups | **DONE** (2026-11-06, built and tested locally; pull request open) |
 | 3 | Live collaboration | Two people editing the same workbook at once, presence and selections, live comments | **DONE** (2026-11-06, built and tested locally; pull request open) |
-| 4 | Hardening and go-live | Load-tested, backed up, deployed on the Hostinger VPS behind the real domain | PENDING |
+| 4 | Hardening and go-live | Load-tested, backed up, deployed on the Hostinger VPS behind the real domain | **PLANNED** (waiting for approval) |
 
 ---
 
@@ -505,19 +505,79 @@ Detailed work items are written when each phase starts (Decision 36).
 - [x] E2E: P3-E2E-01 (journey 7: two browsers edit live and end with the same values; a third as Viewer sees it live)
 - [x] Full local run once (lint, typecheck, unit, integration, contract, Rust, editor tests, E2E); docs updated (project_data 4.6 bridge table, database_schema, local_setup, decision log)
 
-### Phase 4: Hardening and go-live — PENDING
+### Phase 4: Hardening and go-live — PLANNED (waiting for the owner's approval)
 
-**Goal:** JD Sheets runs reliably for the whole company on the Hostinger VPS.
+**Goal:** JD Sheets runs reliably for the whole company on the Hostinger VPS at `https://sheets.jdfusion.in`, reachable only from allowed networks (Super Admins from anywhere, Decision 57).
 
-**Scope:** load test (concurrent editors per workbook, open workbooks per service, save sizes), memory limits for the Rust service; security review (headers, CSP, cookies, rate limits, dependency audit, `cargo audit`); monitoring and alerts; structured logs; backups with a restore drill; VPS setup (firewall, SSH keys, Docker, Caddy on the real domain); deployment pipeline with automatic migrations; `runbook.md` and `hardening_results.md` completed; owner acceptance.
+**Branch:** `phase-4-golive` (from `phase-3-collab`; pull request #4 should be merged first). Owner answers: Decisions 59 and 60. Technical approach: Decision 61.
 
-**Owner answers (Decision 59):**
-- **Domain:** `sheets.jdfusion.in`, DNS at GoDaddy.
-- **Server:** the existing Hostinger KVM 2, shared with n8n and probably the CRM.
-- **Backups:** Google Drive, plus a local copy on the VPS.
-- **Alerts:** email to the owner.
-- **Load test:** 30 staff, 20 editing one workbook at once, largest workbook about 10,000 rows.
+**What you will see:** JD Sheets live on its domain from the office; sign-up codes arriving by email; a nightly encrypted backup in the Google Drive of `JDSheetsByAdam@gmail.com`; an alert email when something breaks; a phone on mobile data getting the blocked page.
 
-**Still pending from the owner:** GoDaddy access (DNS record), the office and VPN IPs, the Google account and app password for sign-up emails. **Next step:** plan Phase 4 in a new session, starting by inspecting the server (what already uses ports 80 and 443, and memory).
+**Who does what:** Claude writes and tests everything locally and in CI. The owner runs each server step in Hostinger's browser terminal, guided, and types every secret there (Decision 60). Owner sessions: W-401 (5 minutes, now), W-410 and W-411 (one guided session, about 2 hours), W-412 (acceptance walk-through).
 
-**What you will see:** JD Sheets live on its domain, reachable only from the office networks.
+**Execution order:** `W-401 → W-402 → W-403 → W-404 → W-405 → W-406 → W-407 → W-408 → W-409 → W-410 → W-411 → W-412`. W-402 to W-408 are built locally; W-409 needs the server (it runs after the first deploy of W-410 but before staff are invited).
+
+**Scenario coverage:** every Phase 4 scenario maps to an item below. New: P4-MAIL-01..03 (the real mailer, Decision 60). Carried from Phase 2: the fresh-clone drill (now CI building the images from a clean checkout, W-404) and P1-NET-16 (Caddy's blocked page with a closed allowlist, checked in CI in W-404; production keeps the allowlist open, Decision 57). Nothing is moved out of Phase 4.
+
+#### W-401: Server check and the proxy choice (owner, read-only)
+- [ ] The owner pastes the read-only check (`runbook.md`, "Server check") and sends back the output
+- [ ] Decide the proxy layout (Decision 61): existing proxy in front, or Caddy on 80/443; `TRUSTED_PROXY_HOPS`; whether Gmail's port 465 is reachable; free memory and disk. Logged as a decision
+- [ ] Settle SSH (P4-SEC-04): who else logs in over SSH, and whether password login can be turned off
+
+#### W-402: The real mailer (P4-MAIL-01..03)
+- [ ] RED tests: the `smtp` driver passes the existing mailer contract suite against a local SMTP test server (P4-MAIL-01); wrong password or Gmail down → the `identity.sendOtp` job retries, then fails with a log line that holds no password or code (P4-MAIL-02); production refuses `MAIL_DRIVER=fake` and a missing SMTP setting (P4-MAIL-03)
+- [ ] `smtp` driver (nodemailer, port 465, TLS) chosen by the registry; env schema for `SMTP_*` and `MAIL_FROM`; `local_setup.md` updated
+
+#### W-403: Security review (P4-SEC-01..03, P4-OBS-02)
+- [ ] RED tests through the full Docker stack: every page and API response has the CSP with a nonce, HSTS, frame rules (only our own editor iframe), no-sniff, referrer policy (P4-SEC-01); `/api/internal/*` and the Rust service's internal routes give 404 from outside and the service is not published (P4-SEC-03)
+- [ ] `npm audit --omit=dev` and `cargo audit` in CI; no high findings, or each logged with a reason in `hardening_results.md` (P4-SEC-02)
+- [ ] Log check: a test signs up, signs in, saves and edits live, then scans every log line for passwords, codes, tokens, secrets and cell values (P4-OBS-02)
+- [ ] Cookies `Secure`, `HttpOnly`, `SameSite`; sign-in and sign-up rate limits reviewed
+
+#### W-404: Production images in CI and the production compose file
+- [ ] RED check (extends `scripts/docker-check.mjs`): the production compose file has memory limits per Decision 61, log rotation, read-only containers, a health check for every service (the worker gets one), no published ports except the edge, images by tag; the stack starts healthy from a clean checkout; Caddy's blocked page with a closed allowlist (P1-NET-16)
+- [ ] GitHub Actions: on `main`, build `app`, `worker`, `collab`, `migrator` and `ops` images for `linux/amd64`, tag with the commit, push to the private GitHub container registry
+- [ ] Compose variants for both proxy layouts of W-401 (only the chosen one is used)
+
+#### W-405: Rust service memory guard (P4-LOAD-03)
+- [ ] RED tests (Rust): above a high-water mark the service unloads idle workbooks first (saving any due version), then refuses to open another with a friendly "busy, try again shortly" code; open sessions are never dropped; memory measured through a `Clock`-style probe so tests do not need real memory pressure
+- [ ] The limit and mark come from config (Rule 7, checked equal to `appConfig.ts`); the app shows the friendly message
+
+#### W-406: Server scripts: setup, deploy, roll back (P4-DEPLOY-01, -02, P4-SEC-05)
+- [ ] `ops/setup.sh` (safe to run twice): checks Docker, creates `/opt/jdsheets` and `/etc/jdsheets`, writes `.env.production` from prompts with secrets generated on the server, permissions root-only (P4-SEC-05)
+- [ ] `ops/deploy.sh <tag>`: pull, fresh local backup, migrations; failed migration → stop, old version still running (P4-DEPLOY-01); new containers must turn healthy, else the previous tag is started again; the deployed and previous tags are recorded
+- [ ] `ops/rollback.sh` (P4-DEPLOY-02)
+- [ ] RED drill, local in Docker: a deliberately failing migration leaves the old version serving; a rollback brings back the previous tag
+
+#### W-407: Backups and restore (P4-BACKUP-01..03)
+- [ ] RED drill, local: `ops/backup.sh` against a local folder standing in for Google Drive produces an encrypted dump and workbook archive that cannot be read without the passphrase; local copies older than 7 days and remote ones older than 30 are removed; a forced failure (wrong passphrase file, remote unreachable) sends an alert to a local test inbox (P4-BACKUP-03)
+- [ ] `ops/restore.sh`: brings back the database and workbook files on an empty stack; the drill checks users, shares, versions and a workbook opening with its values (P4-BACKUP-02 locally first)
+- [ ] systemd timer at 02:30 IST; rclone limited to the files it creates in Google Drive
+
+#### W-408: Monitoring and alerts (P4-OBS-01, -03)
+- [ ] RED drill, local: `ops/watch.sh` with a stopped container, a fake full disk, a certificate near expiry and an old backup each sends one alert, nothing more while it lasts, and one "resolved" mail after
+- [ ] systemd timer every 5 minutes; alert mail through the same Gmail account (curl over SMTPS, password from the root-only file)
+- [ ] P4-OBS-03: tests that the Network access page shows blocked-network counts and the audit trail shows failed sign-ins (built in Phase 1; add counts if missing)
+
+#### W-409: Load test on the VPS (P4-LOAD-01..03)
+- [ ] Tools: a load client (the Rust live test client as a small binary) and an HTTP load script, both run as one-off containers on the server
+- [ ] Runs: 20 live editors on one 10,000-row workbook; 30 staff browsing and opening workbooks; open a 10 MiB workbook; save a 50 MiB workbook; the Rust service's memory with many open workbooks; the whole server's memory, with n8n and the CRM still healthy
+- [ ] Results in `hardening_results.md`; memory limits adjusted if needed
+
+#### W-410: Go-live setup on the server (owner, guided; P4-SEC-04, -05, P4-DEPLOY-03)
+- [ ] Hostinger snapshot first. Hostinger firewall: 80 and 443 open; 22 per W-401
+- [ ] GitHub token (read packages only) and `ops/setup.sh`; the owner types the app password, the Super Admin password and the backup passphrase
+- [ ] Proxy route for `sheets.jdfusion.in`; HTTPS certificate issued, renewal automatic (P4-DEPLOY-03)
+- [ ] First `deploy.sh`; `db:sync-rbac`; private seed (`amit@jdfusion.in`, `103.144.119.117/32`); seed password removed from the env file
+- [ ] Google Drive authorisation for rclone (the owner approves in their own browser); first backup visible in Drive (P4-BACKUP-01); timers on
+
+#### W-411: Drills on the server (P4-DRILL-01, -02, P4-BACKUP-02, P4-SEC-03, -04)
+- [ ] Before staff use it: database down, Rust service down, worker down, disk nearly full (a test file, never real data); each alerts, recovers, and is written in the runbook (P4-DRILL-01)
+- [ ] `admin:reset-super-admin` and `admin:reset-ip-rules` on the server (P4-DRILL-02)
+- [ ] Restore drill from the Google Drive backup on a fresh machine (the owner's Mac in Docker); time recorded (P4-BACKUP-02)
+- [ ] From outside: only 80 and 443 answer (plus 22 per W-401), internal routes 404 (P4-SEC-03, -04)
+
+#### W-412: Runbook, results and owner acceptance (P4-ACCEPT-01)
+- [ ] `runbook.md` and `hardening_results.md` complete, every procedure tried once
+- [ ] Owner walk-through on `https://sheets.jdfusion.in` from the office: sign up with an `@jdfusion.in` address, the code arrives, approve, share, edit live; and a phone on mobile data gets the blocked page (P4-ACCEPT-01)
+- [ ] Pull request, merge to `main`, final deploy from `main`

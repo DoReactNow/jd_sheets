@@ -4,8 +4,9 @@
     {
       "name": "dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 3000
+      "runtimeArgs": ["run", "dev:all"],
+      "port": 47320,
+      "url": "http://127.0.0.1:47320"
     }
   ]
 }

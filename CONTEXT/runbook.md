@@ -6,12 +6,29 @@ How to run JD Sheets in production on the Hostinger VPS. **This is a stub.** It 
 
 | Item | Value |
 |:---|:---|
-| Server | Hostinger KVM VPS *(plan: Q-07)* |
-| Address | `https://<domain>` *(Q-05)* |
+| Server | Hostinger KVM 2, `82.29.165.21`, shared with n8n and the CRM (Decisions 59, 60) |
+| Address | `https://sheets.jdfusion.in` |
 | Containers | `caddy`, `app`, `worker`, `collab`, `db` (Docker Compose, `docker/docker-compose.prod.yml`) |
 | Data | Docker volumes: Postgres data, workbook files (`/data/workbooks`) |
 | Secrets | `.env.production` on the server only (root and the app user) |
-| Backups | nightly, encrypted, off-server *(target: Q-06)* |
+| Backups | nightly, encrypted, Google Drive of the operations account, plus 7 days on the VPS (Decision 61) |
+
+## Server check (W-401, read-only)
+
+Paste into Hostinger's browser terminal. It changes nothing; it only prints what is on the server.
+
+```bash
+echo "== system"; hostname; . /etc/os-release; echo "$PRETTY_NAME"; uptime; nproc; free -h; df -h /
+echo "== containers"; docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}'
+echo "== compose folders"; docker ps -q | xargs -r docker inspect -f '{{.Name}} {{index .Config.Labels "com.docker.compose.project.working_dir"}}'
+echo "== proxies"; for c in $(docker ps --format '{{.Names}} {{.Image}}' | grep -Ei 'traefik|nginx|caddy|haproxy' | cut -d' ' -f1); do echo "$c: $(docker inspect -f '{{.Config.Image}} {{json .Args}}' "$c" | cut -c1-600)"; done
+echo "== networks"; docker network ls
+echo "== listening"; ss -tlnp | grep -E ':(22|80|443|5432|5678)\b'
+echo "== firewall"; ufw status 2>/dev/null | head -20
+echo "== ssh"; grep -hE '^\s*(PasswordAuthentication|PermitRootLogin|PubkeyAuthentication)' /etc/ssh/sshd_config /etc/ssh/sshd_config.d/*.conf 2>/dev/null; ls -l /root/.ssh/authorized_keys 2>/dev/null
+echo "== gmail 465"; timeout 5 bash -c '</dev/tcp/smtp.gmail.com/465' && echo reachable || echo blocked
+echo "== docker"; docker --version; docker compose version
+```
 
 ## First setup *(Phase 4)*
 

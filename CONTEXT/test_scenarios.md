@@ -566,6 +566,9 @@ These apply to every endpoint, screen, job, table and Rust handler. A plan does 
 - **P4-OBS-03** Blocked-network counts and failed sign-ins are visible to admins.
 - **P4-DRILL-01** Service-down drills: database, collab service, worker, disk full; each recovers and is written in the runbook.
 - **P4-DRILL-02** The Super Admin and IP-rule recovery commands work on the production server.
+- **P4-MAIL-01** The `smtp` mail driver passes the mailer contract suite against a local SMTP test server (never Gmail in tests).
+- **P4-MAIL-02** A wrong app password or an unreachable mail server makes the `identity.sendOtp` job retry and then fail, with log lines that contain no password and no code.
+- **P4-MAIL-03** Production refuses `MAIL_DRIVER=fake` and refuses to start when an SMTP setting is missing.
 - **P4-ACCEPT-01** The owner's acceptance walk-through on the real domain from an office network, and a refusal from a non-office network.
 
 ---
@@ -583,4 +586,4 @@ These apply to every endpoint, screen, job, table and Rust handler. A plan does 
 | TQ-07 | Rebasing rule per command type (P3-REBASE-03) | 3 (answered: Decision 56) |
 | TQ-08 | Maximum editors per workbook (P3-PERF-03) | 3 (answered: Decision 56) |
 | TQ-09 | How live snapshots are labelled in history (P3-SNAP-03) | 3 (answered: Decision 56) |
-| TQ-10 | Load-test targets: number of staff, peak concurrent editors, largest expected workbook (P4-LOAD-01) | 4 (partly answered: Decision 56, about 30 staff, 20 editors on one workbook) |
+| TQ-10 | Load-test targets: number of staff, peak concurrent editors, largest expected workbook (P4-LOAD-01) | 4 (answered: Decisions 56, 59, 60) |

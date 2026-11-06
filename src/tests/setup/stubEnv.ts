@@ -21,6 +21,15 @@ export function stubEnvFor(appEnv: StubAppEnv, overrides: Record<string, string>
     STORAGE_LOCAL_DIR: "./storage/test",
     NETWORK_ENFORCEMENT: production ? "on" : "off",
     MAIL_DRIVER: production ? "smtp" : "fake",
+    ...(production
+      ? {
+          SMTP_HOST: "127.0.0.1",
+          SMTP_PORT: "2525",
+          SMTP_USER: "sender@example.com",
+          SMTP_PASSWORD: "stub-not-sent",
+          MAIL_FROM: "JD Sheets <sender@example.com>",
+        }
+      : {}),
     AUTH_SECRET: production ? "c".repeat(48) : "test-only-auth-secret-0123456789abcdef0123",
     ...overrides,
   };

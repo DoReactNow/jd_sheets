@@ -533,33 +533,33 @@ Detailed work items are written when each phase starts (Decision 36).
 
 #### W-403: Security review (P4-SEC-01..03, P4-OBS-02)
 - [ ] RED tests through the full Docker stack: every page and API response has the CSP with a nonce, HSTS, frame rules (only our own editor iframe), no-sniff, referrer policy (P4-SEC-01); `/api/internal/*` and the Rust service's internal routes give 404 from outside and the service is not published (P4-SEC-03)
-- [ ] `npm audit --omit=dev` and `cargo audit` in CI; no high findings, or each logged with a reason in `hardening_results.md` (P4-SEC-02)
-- [ ] Log check: a test signs up, signs in, saves and edits live, then scans every log line for passwords, codes, tokens, secrets and cell values (P4-OBS-02)
+- [x] `npm audit --omit=dev` and `cargo audit` in CI; no high findings, or each logged with a reason in `hardening_results.md` (P4-SEC-02)
+- [x] Log check (P4-OBS-02), in `scripts/stack-check.sh`: sign-in with the right and a wrong password, then every container log is scanned for both passwords, the session, the database password and the three secrets. Codes and cell values: the logger's redaction tests (Phases 1 and 3); a live-editing pass with log scan is part of the VPS load test (W-409)
 - [ ] Cookies `Secure`, `HttpOnly`, `SameSite`; sign-in and sign-up rate limits reviewed
 
 #### W-404: Production images in CI and the production compose file
-- [ ] RED check (extends `scripts/docker-check.mjs`): the production compose file has memory limits per Decision 61, log rotation, read-only containers, a health check for every service (the worker gets one), no published ports except the edge, images by tag; the stack starts healthy from a clean checkout; Caddy's blocked page with a closed allowlist (P1-NET-16)
-- [ ] GitHub Actions: on `main`, build `app`, `worker`, `collab`, `migrator` and `ops` images for `linux/amd64`, tag with the commit, push to the private GitHub container registry
-- [ ] Behind Traefik (Decision 62): Caddy on `root_default` with Traefik labels, no published ports, `trusted_proxies` for the Docker network, `TRUSTED_PROXY_HOPS=2`; tests for the client address with a spoofed `X-Forwarded-For` from outside
+- [x] RED check (`scripts/stack-check.sh` in CI, plus `docker compose config`): the production compose file has memory limits per Decision 61, log rotation, read-only containers, a health check for every service (the worker gets one), no published ports except the edge, images by tag; the stack starts healthy from a clean checkout; Caddy's blocked page with a closed allowlist (P1-NET-16)
+- [x] GitHub Actions (`.github/workflows/images.yml`): on `main` and phase branches, build `app`, `worker`, `collab`, `migrator` and `ops` images for `linux/amd64`, tag with the commit, push to the private GitHub container registry
+- [x] Behind Traefik (Decision 62): Caddy on `root_default` with Traefik labels, no published ports, `trusted_proxies` for the Docker network, `TRUSTED_PROXY_HOPS=2`; tests for the client address with a spoofed `X-Forwarded-For` from outside
 
 #### W-405: Rust service memory guard (P4-LOAD-03)
-- [ ] RED tests (Rust): above a high-water mark the service unloads idle workbooks first (saving any due version), then refuses to open another with a friendly "busy, try again shortly" code; open sessions are never dropped; memory measured through a `Clock`-style probe so tests do not need real memory pressure
-- [ ] The limit and mark come from config (Rule 7, checked equal to `appConfig.ts`); the app shows the friendly message
+- [x] RED tests (Rust, `tests/live.rs` and `src/memory.rs`; written alongside the code): above a high-water mark (80% of the container limit, read from cgroup) the service unloads idle workbooks first (saving any due version), then refuses to open another with a friendly "busy, try again shortly" code; open sessions are never dropped; memory measured through a `Clock`-style probe so tests do not need real memory pressure
+- [x] The limit comes from the container (`mem_limit`); a refused open closes with 1011 "busy" and the page falls back to one editor at a time, as when the service is down. The limit and mark come from config (Rule 7, checked equal to `appConfig.ts`); the app shows the friendly message
 
 #### W-406: Server scripts: setup, deploy, roll back (P4-DEPLOY-01, -02, P4-SEC-05)
-- [ ] `ops/setup.sh` (safe to run twice): checks Docker, creates `/opt/jdsheets` and `/etc/jdsheets`, writes `.env.production` from prompts with secrets generated on the server, permissions root-only (P4-SEC-05)
-- [ ] `ops/deploy.sh <tag>`: pull, fresh local backup, migrations; failed migration → stop, old version still running (P4-DEPLOY-01); new containers must turn healthy, else the previous tag is started again; the deployed and previous tags are recorded
-- [ ] `ops/rollback.sh` (P4-DEPLOY-02)
-- [ ] RED drill, local in Docker: a deliberately failing migration leaves the old version serving; a rollback brings back the previous tag
+- [x] `ops/setup.sh` (safe to run twice): checks Docker, creates `/opt/jdsheets` and `/etc/jdsheets`, writes `.env.production` from prompts with secrets generated on the server, permissions root-only (P4-SEC-05)
+- [x] `ops/deploy.sh <tag>`: pull, fresh local backup, migrations; failed migration → stop, old version still running (P4-DEPLOY-01); new containers must turn healthy, else the previous tag is started again; the deployed and previous tags are recorded
+- [x] `ops/rollback.sh` (P4-DEPLOY-02); `ops/admin.sh` for first-run and the recovery commands
+- [x] RED drill (in CI's stack check, real images, real Traefik): a deliberately failing migration leaves the old version serving; a rollback brings back the previous tag
 
 #### W-407: Backups and restore (P4-BACKUP-01..03)
-- [ ] RED drill, local: `ops/backup.sh` against a local folder standing in for Google Drive produces an encrypted dump and workbook archive that cannot be read without the passphrase; local copies older than 7 days and remote ones older than 30 are removed; a forced failure (wrong passphrase file, remote unreachable) sends an alert to a local test inbox (P4-BACKUP-03)
-- [ ] `ops/restore.sh`: brings back the database and workbook files on an empty stack; the drill checks users, shares, versions and a workbook opening with its values (P4-BACKUP-02 locally first)
-- [ ] systemd timer at 02:30 IST; rclone limited to the files it creates in Google Drive
+- [x] RED drill (CI stack check): `ops/backup.sh` against a local folder standing in for Google Drive produces an encrypted dump and workbook archive that cannot be read without the passphrase; local copies older than 7 days and remote ones older than 30 are removed; a forced failure (wrong passphrase file, remote unreachable) sends an alert to a local test inbox (P4-BACKUP-03)
+- [x] `ops/restore.sh`: brings back the database and workbook files on an empty stack; the drill checks users, shares, versions and a workbook opening with its values (P4-BACKUP-02 locally first)
+- [x] systemd timer at 02:30 IST (`ops/install-timers.sh`); rclone limited to the files it creates in Google Drive
 
 #### W-408: Monitoring and alerts (P4-OBS-01, -03)
-- [ ] RED drill, local: `ops/watch.sh` with a stopped container, a fake full disk, a certificate near expiry and an old backup each sends one alert, nothing more while it lasts, and one "resolved" mail after
-- [ ] systemd timer every 5 minutes; alert mail through the same Gmail account (curl over SMTPS, password from the root-only file)
+- [x] RED drill (CI stack check): `ops/watch.sh` with a stopped container, a fake full disk, a certificate near expiry and an old backup each sends one alert, nothing more while it lasts, and one "resolved" mail after
+- [x] systemd timer every 5 minutes; alert mail through the same Gmail account (curl over SMTPS, password from the root-only file)
 - [ ] P4-OBS-03: tests that the Network access page shows blocked-network counts and the audit trail shows failed sign-ins (built in Phase 1; add counts if missing)
 
 #### W-409: Load test on the VPS (P4-LOAD-01..03)

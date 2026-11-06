@@ -1,6 +1,6 @@
 # Operations Runbook: JD Sheets
 
-How to run JD Sheets in production on the Hostinger VPS. **This is a stub.** It is completed and proven in Phase 4 (every procedure is tried at least once before go-live). Sections marked *(Phase 4)* are placeholders.
+How to run JD Sheets in production on the Hostinger VPS. Every procedure here is tried at least once before go-live (Phase 4, W-411); the scripts live in `ops/` and ship to the server in the `ops` image. The server scripts are also exercised on every build by `scripts/stack-check.sh` in CI.
 
 ## Production at a glance
 
@@ -30,33 +30,49 @@ echo "== gmail 465"; timeout 5 bash -c '</dev/tcp/smtp.gmail.com/465' && echo re
 echo "== docker"; docker --version; docker compose version
 ```
 
-## First setup *(Phase 4)*
+## First setup (W-410)
 
-1. VPS: Ubuntu LTS, updates, a non-root user, SSH keys only, password login off.
-2. Hostinger firewall: 80 and 443 from anywhere (Caddy applies the IP allowlist), 22 only from the owner's IPs.
-3. Docker Engine and Compose.
-4. Clone the repository; create `.env.production` from the example.
-5. DNS for the domain pointing to the VPS; Caddy gets certificates automatically.
-6. `docker compose -f docker/docker-compose.prod.yml up -d --build`.
-7. Migrations, `db:sync-rbac`, private seed (first Super Admin and bootstrap IP rules). Remove the seed password from `.env.production` afterwards.
-8. Sign in as the Super Admin from an office network; check the Network access page; check diagnostics.
+Everything runs as root in Hostinger's browser terminal. Secrets are typed there, never sent anywhere else (Decision 60). `<tag>` is the commit whose images GitHub built (Actions → Images, green).
 
-## Everyday *(Phase 4)*
+1. **Snapshot** (recommended): Hostinger panel → VPS → Snapshots → Create.
+2. **Get the server files** (images come from GitHub's registry with the server's existing login):
+   ```bash
+   mkdir -p /opt/jdsheets/releases/<tag> && docker run --rm ghcr.io/doreactnow/jd_sheets/ops:<tag> | tar -x -C /opt/jdsheets/releases/<tag>
+   ```
+   If the download is refused, log in once with a GitHub token that can only read packages: `docker login ghcr.io -u DoReactNow`.
+3. **Settings and secrets:** `/opt/jdsheets/releases/<tag>/ops/setup.sh`. It asks for the web address, the Gmail address and its app password, the alert address, the first Super Admin's email, the office addresses and the backup passphrase. Everything else (database password, secrets) is generated on the server. Files: `/opt/jdsheets/.env.production` and `/etc/jdsheets/backup.pass`, root only.
+4. **First deploy:** `/opt/jdsheets/releases/<tag>/ops/deploy.sh <tag>`. Traefik sees the new site and gets the HTTPS certificate within a minute.
+5. **Roles, office networks, first Super Admin:** `/opt/jdsheets/current/ops/admin.sh first-run` (asks for the Super Admin's password; it is never stored in a file).
+6. **Google Drive for backups:** `/opt/jdsheets/current/ops/connect-drive.sh`. It prints a line starting with `rclone authorize "drive"`. On the Mac: `brew install rclone`, run that line, approve in the browser as the backup Gmail account, and paste the code it prints back into the server terminal.
+7. **Timers:** `/opt/jdsheets/current/ops/install-timers.sh` (backup 02:30 India time, health check every 5 minutes). Then a first backup now: `/opt/jdsheets/current/ops/backup.sh`. It shows up in Google Drive, folder "JD Sheets backups".
+8. Sign in at `https://sheets.jdfusion.in` as the Super Admin; check the Network access page and Diagnostics.
 
-- Deploy a new version: pull, `editor:build` inside the image build, migrations run first, then the new containers.
-- Roll back: start the previous image tags; migrations are backward compatible (Decision 30).
-- Check health: Diagnostics page, `docker compose ps`, container logs.
-- GridCraft is our own copy (Decision 55); there are no automatic updates. A fix from GridCraft's releases is copied in by hand only when needed, with a test.
+Server-wide SSH and firewall hardening comes after go-live (Decision 63).
+
+## Everyday
+
+| Task | Command (as root) |
+|:---|:---|
+| Deploy a new version | `/opt/jdsheets/current/ops/deploy.sh <tag>`: backup, migrations, then the new containers; if they do not turn healthy, the previous version is started again |
+| Roll back | `/opt/jdsheets/current/ops/rollback.sh` (the previous version), or `rollback.sh <tag>` |
+| What is running | `cat /opt/jdsheets/state/deployed-tag`; `docker compose -p jdsheets ps` |
+| Logs | `docker logs --tail 100 jdsheets-app-1` (also `-worker-1`, `-collab-1`, `-db-1`, `-caddy-1`); rotated at 10 MB × 5 |
+| Health check now | `/opt/jdsheets/current/ops/watch.sh` |
+| Timers | `systemctl list-timers 'jdsheets-*'`; `journalctl -u jdsheets-backup --since today` |
+
+GridCraft is our own copy (Decision 55); there are no automatic updates. A fix from GridCraft's releases is copied in by hand only when needed, with a test.
 
 ## Recovery commands
 
-| Situation | Command (inside the `app` container) |
+| Situation | Command (as root on the server) |
 |:---|:---|
-| The only Super Admin is locked out or forgot the password | `npm run admin:reset-super-admin -- --email <name>@jdfusion.in` (asks for the password on the terminal) |
-| Network rules lock everyone out | `npm run admin:reset-ip-rules -- --cidr <office CIDR>` |
-| The edge allowlist is wrong | edit `EDGE_ALLOWED_CIDRS` in `.env.production`, restart `caddy` |
+| The only Super Admin is locked out or forgot the password | `/opt/jdsheets/current/ops/admin.sh reset-super-admin <name>@jdfusion.in` (asks for the password) |
+| Network rules lock everyone out (for example the office address changed) | A Super Admin can sign in from anywhere and fix it on the Network access page (Decision 57). Last resort: `/opt/jdsheets/current/ops/admin.sh reset-ip-rules <address>/32` |
+| The edge allowlist | Open in production (Decision 57); the app's network rules are the wall |
 
-## When things go wrong *(Phase 4)*
+## When things go wrong
+
+Alert emails come from the health check: one when a problem starts, one when it clears.
 
 | Symptom | First checks |
 |:---|:---|
@@ -65,9 +81,17 @@ echo "== docker"; docker --version; docker compose version
 | Sign-up codes do not arrive | worker logs for `mail.sendOtp`, Google SMTP app password, Gmail daily limit |
 | Disk filling up | version pruning and trash purge jobs, backup leftovers |
 
-## Backups and restore *(Phase 4)*
+## Backups and restore
 
-Nightly: Postgres dump + workbook files, encrypted, sent off-server; failure alerts. Restore drill steps and timings recorded in `hardening_results.md`.
+- **Nightly at 02:30 India time** (`jdsheets-backup.timer`): a database dump and the workbook files in one file, encrypted with the backup passphrase (GnuPG, AES-256). Kept 7 days in `/opt/jdsheets/backups` and 30 days in Google Drive, folder "JD Sheets backups". A failure emails an alert; the health check also alerts when the last good backup is over 26 hours old.
+- Every deploy first makes a local backup.
+- **Restore** (replaces everything; asks you to type RESTORE):
+  - from Google Drive, newest: `/opt/jdsheets/current/ops/restore.sh --from-drive`
+  - a named one: `restore.sh --from-drive jdsheets-20261107-210000.tar.gpg`, or a local file: `restore.sh /opt/jdsheets/backups/<file>`
+- **On a fresh machine:** `setup.sh` (type the same backup passphrase), `deploy.sh <tag>`, `connect-drive.sh`, then `restore.sh --from-drive`.
+- **Without the passphrase the backups cannot be opened.** Keep it in the password manager and on paper.
+
+Drill timings: `hardening_results.md`.
 
 ## Repository *(Phase 0, W-016)*
 

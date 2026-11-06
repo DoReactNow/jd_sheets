@@ -37,6 +37,11 @@ function prodSource(overrides: EnvSource = {}): EnvSource {
     COLLAB_TOKEN_SECRET: realSecret(),
     INTERNAL_SERVICE_TOKEN: realSecret(),
     MAIL_DRIVER: "smtp",
+    SMTP_HOST: "smtp.example.com",
+    SMTP_PORT: "465",
+    SMTP_USER: "sender@example.com",
+    SMTP_PASSWORD: "abcd efgh ijkl mnop",
+    MAIL_FROM: "JD Sheets <sender@example.com>",
     ...overrides,
   });
 }
@@ -151,6 +156,35 @@ describe("parseEnv: production refusals (P0-ENV-02, P0-ACC-01)", () => {
   });
 });
 
+describe("parseEnv: the smtp mailer (P4-MAIL-03)", () => {
+  it.each(["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "MAIL_FROM"])(
+    "refuses MAIL_DRIVER=smtp without %s",
+    (name) => {
+      expect(() => parseEnv(prodSource({ [name]: undefined }))).toThrow(new RegExp(name));
+    },
+  );
+
+  it("refuses a port that is not a number and a sender without an address", () => {
+    expect(() => parseEnv(prodSource({ SMTP_PORT: "smtp" }))).toThrow(/SMTP_PORT/);
+    expect(() => parseEnv(prodSource({ MAIL_FROM: "JD Sheets" }))).toThrow(/MAIL_FROM/);
+  });
+
+  it("does not put the app password in the error message", () => {
+    let message = "";
+    try {
+      parseEnv(prodSource({ SMTP_HOST: undefined }));
+    } catch (error) {
+      message = String(error);
+    }
+    expect(message).toMatch(/SMTP_HOST/);
+    expect(message).not.toContain("abcd efgh");
+  });
+
+  it("does not need SMTP settings for the fake mailer outside production", () => {
+    expect(parseEnv(devSource({ MAIL_DRIVER: "fake" })).MAIL_DRIVER).toBe("fake");
+  });
+});
+
 describe("example env files", () => {
   const read = (file: string): EnvSource => parse(readFileSync(file, "utf8"));
 
@@ -168,7 +202,9 @@ describe("example env files", () => {
       if (!value?.includes("<")) continue;
       source[name] = /SECRET|TOKEN/.test(name)
         ? realSecret()
-        : name === "APP_URL"
+        : /SMTP_USER|MAIL_FROM/.test(name)
+          ? "sender@example.com"
+          : name === "APP_URL"
           ? "https://sheets.example.com"
           : name === "DATABASE_URL"
             ? "postgresql://user:pass@db:5432/jdsheets"

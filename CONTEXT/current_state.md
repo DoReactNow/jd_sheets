@@ -528,8 +528,8 @@ Detailed work items are written when each phase starts (Decision 36).
 - [ ] Owner's answer on memory: if the load test shows the server is too small, bigger plan or separate VPS
 
 #### W-402: The real mailer (P4-MAIL-01..03)
-- [ ] RED tests: the `smtp` driver passes the existing mailer contract suite against a local SMTP test server (P4-MAIL-01); wrong password or Gmail down → the `identity.sendOtp` job retries, then fails with a log line that holds no password or code (P4-MAIL-02); production refuses `MAIL_DRIVER=fake` and a missing SMTP setting (P4-MAIL-03)
-- [ ] `smtp` driver (nodemailer, port 465, TLS) chosen by the registry; env schema for `SMTP_*` and `MAIL_FROM`; `local_setup.md` updated
+- [x] RED tests: the `smtp` driver passes the new mailer contract suite (`src/shared/mail/__tests__/mailerContract.ts`) against a local SMTP test server (P4-MAIL-01); wrong password or Gmail down → the `identity.sendOtp` job retries, then fails with a log line that holds no password or code (P4-MAIL-02); production refuses `MAIL_DRIVER=fake` and a missing SMTP setting (P4-MAIL-03)
+- [x] `smtp` driver (nodemailer, port 465, TLS) chosen by the registry; env schema for `SMTP_*` and `MAIL_FROM`; `local_setup.md` updated
 
 #### W-403: Security review (P4-SEC-01..03, P4-OBS-02)
 - [ ] RED tests through the full Docker stack: every page and API response has the CSP with a nonce, HSTS, frame rules (only our own editor iframe), no-sniff, referrer policy (P4-SEC-01); `/api/internal/*` and the Rust service's internal routes give 404 from outside and the service is not published (P4-SEC-03)

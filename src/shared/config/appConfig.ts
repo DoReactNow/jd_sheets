@@ -104,6 +104,10 @@ export const APP_CONFIG = deepFreeze({
     /** After a correct code, the person has this long to finish sign-up. */
     ticketMinutes: 15,
   },
+  mail: {
+    /** Connect, greeting and socket timeout for the smtp mailer (P4-MAIL-02). */
+    timeoutSeconds: 15,
+  },
   network: {
     /** How long the IP rules are cached in each process (Decision 46). */
     cacheSeconds: 5,

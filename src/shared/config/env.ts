@@ -62,7 +62,19 @@ const baseSchema = z.object({
   MAIL_DRIVER: z
     .enum(["fake", "smtp"], { error: "MAIL_DRIVER must be fake or smtp" })
     .default("fake"),
+  /** The smtp mailer (Decision 60): Gmail on 465 with an app password. */
+  SMTP_HOST: z.string().min(1).optional(),
+  SMTP_PORT: z
+    .string()
+    .regex(/^\d+$/, { error: "SMTP_PORT must be a port number" })
+    .transform(Number)
+    .optional(),
+  SMTP_USER: z.string().min(1).optional(),
+  SMTP_PASSWORD: z.string().min(1).optional(),
+  MAIL_FROM: z.string().includes("@", { error: "MAIL_FROM must hold an email address" }).optional(),
 });
+
+const SMTP_REQUIRED = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "MAIL_FROM"] as const;
 
 const S3_REQUIRED = [
   "STORAGE_S3_ENDPOINT",
@@ -82,6 +94,11 @@ const envSchema = baseSchema.superRefine((env, ctx) => {
   if (env.STORAGE_DRIVER === "s3") {
     for (const name of S3_REQUIRED) {
       if (!env[name]) issue(name, `${name} is required when STORAGE_DRIVER=s3`);
+    }
+  }
+  if (env.MAIL_DRIVER === "smtp") {
+    for (const name of SMTP_REQUIRED) {
+      if (env[name] === undefined) issue(name, `${name} is required when MAIL_DRIVER=smtp`);
     }
   }
   if (env.APP_ENV === "production") {

@@ -1,0 +1,484 @@
+Upstream: pending (see 0001-access-mode.upstream.md)
+Subject: gridcraft-web: access modes for host pages (view, comment, edit) and "save now"
+
+JD Sheets patch 0001 (Decisions 8, 43, 53). A host page opens GridCraft with ?mode=view|comment|edit
+and may change it later with gridcraft:mode { mode }. View mode puts back any change to the
+workbook; comment mode keeps only the user's own notes and comments (and their replies to others'
+threads). What a person only looks at is never put back. gridcraft:saveNow saves as File › Save
+would, for a host that autosaves. Only apps/gridcraft-web changes; tests: src/access/tests.rs.
+Pinned tag: see vendor/GRIDCRAFT_VERSION.
+
+diff --git a/apps/gridcraft-web/src/access.rs b/apps/gridcraft-web/src/access.rs
+new file mode 100644
+index 0000000..d72f9dc
+--- /dev/null
++++ b/apps/gridcraft-web/src/access.rs
+@@ -0,0 +1,180 @@
++//! Access modes for a host page: `?mode=view|comment|edit` when the page loads, and
++//! `gridcraft:mode { mode }` from the parent later (see the `host` module).
++//!
++//! In view mode nothing in a workbook may change. In comment mode only notes and comments may,
++//! and only the user's own (the author named by `?author=`), plus replies of theirs added to
++//! someone else's thread. Edit mode is GridCraft as it is.
++//!
++//! The rule is applied after every frame to whatever that frame changed, so it holds however the
++//! change was made (typing, paste, the ribbon, menus, keyboard shortcuts, undo, dialogs): a change
++//! the mode does not allow is put back, and a short notice says why. What a person only looks at
++//! (the active sheet, zoom, scroll position, page view) is never put back. The host still decides
++//! what it stores; this keeps the screen honest about what the person may do.
++
++use std::collections::BTreeMap;
++use std::sync::Arc;
++
++use gridcraft_engine::model::{Comment, Workbook};
++use gridcraft_ui_egui::SheetApp;
++
++#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
++pub enum Mode {
++    #[default]
++    Edit,
++    Comment,
++    View,
++}
++
++impl Mode {
++    pub fn parse(value: &str) -> Option<Mode> {
++        match value {
++            "edit" => Some(Mode::Edit),
++            "comment" => Some(Mode::Comment),
++            "view" => Some(Mode::View),
++            _ => None,
++        }
++    }
++
++    /// Whether Save hands the workbook to the host (comment mode saves comments).
++    pub fn saves(self) -> bool {
++        self != Mode::View
++    }
++}
++
++pub const VIEW_NOTICE: &str = "You can view this workbook, but not change it.";
++pub const COMMENT_NOTICE: &str = "You can add comments here, but not change the workbook's content.";
++
++/// Remembers, per open workbook, its content as last allowed.
++#[derive(Default)]
++pub struct Gate {
++    mode: Mode,
++    allowed: Vec<(u64, Arc<Workbook>)>,
++}
++
++impl Gate {
++    pub fn new(mode: Mode) -> Gate {
++        Gate { mode, allowed: Vec::new() }
++    }
++
++    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
++    pub fn mode(&self) -> Mode {
++        self.mode
++    }
++
++    /// A new mode applies at once; what is on screen now is its starting point.
++    pub fn set_mode(&mut self, mode: Mode) {
++        self.mode = mode;
++        self.allowed.clear();
++    }
++
++    /// After a frame: puts back whatever the mode does not allow. True when something was.
++    pub fn enforce(&mut self, app: &mut SheetApp) -> bool {
++        if self.mode == Mode::Edit {
++            self.allowed.clear();
++            return false;
++        }
++        // Typing into a cell is never allowed outside edit mode, so its editor never stays open.
++        app.editor = None;
++        if self.mode == Mode::View {
++            app.text_box_editor = None;
++        }
++        let author = app.session.prefs.user_name.clone();
++        let mode = self.mode;
++        let Some(doc) = app.session.active_mut() else { return false };
++        let Some(index) = self.allowed.iter().position(|(uid, _)| *uid == doc.uid) else {
++            self.allowed.push((doc.uid, doc.wb.clone()));
++            return false;
++        };
++        let before = self.allowed[index].1.clone();
++        if Arc::ptr_eq(&before, &doc.wb) {
++            return false;
++        }
++        let permitted = permitted(&before, &doc.wb, mode, &author);
++        if permitted == *doc.wb {
++            self.allowed[index].1 = doc.wb.clone();
++            return false;
++        }
++        // Reuse the saved or previous workbook when the content is the same, so "unsaved
++        // changes" is exactly what it was.
++        let restored = if permitted == *doc.saved {
++            doc.saved.clone()
++        } else if permitted == *before {
++            before
++        } else {
++            Arc::new(permitted)
++        };
++        doc.wb = restored.clone();
++        doc.revision = doc.revision.wrapping_add(1);
++        self.allowed[index].1 = restored;
++        let notice = if mode == Mode::View { VIEW_NOTICE } else { COMMENT_NOTICE };
++        app.toast = Some((notice.into(), gridcraft_ui_egui::now_ms()));
++        true
++    }
++}
++
++/// `before` with what `now` may keep in `mode`: the view settings, and in comment mode the
++/// author's own comment changes.
++fn permitted(before: &Workbook, now: &Workbook, mode: Mode, author: &str) -> Workbook {
++    let mut out = before.clone();
++    if before.sheets.len() != now.sheets.len() {
++        return out;
++    }
++    out.active_sheet = now.active_sheet.clone();
++    out.view = now.view;
++    for ((sheet, was), is) in out.sheets.iter_mut().zip(&before.sheets).zip(&now.sheets) {
++        let same_view =
++            was.zoom == is.zoom && was.view_active == is.view_active && was.view_top_left == is.view_top_left && was.view == is.view;
++        let comments = if mode == Mode::Comment { merged_comments(&was.comments, &is.comments, author) } else { None };
++        if same_view && comments.is_none() {
++            continue;
++        }
++        let sheet = Arc::make_mut(sheet);
++        sheet.zoom = is.zoom;
++        sheet.view_active = is.view_active;
++        sheet.view_top_left = is.view_top_left;
++        sheet.view = is.view;
++        if let Some(comments) = comments {
++            sheet.comments = comments;
++        }
++    }
++    out
++}
++
++/// The comments `author` may leave: theirs as they are now, others' as they were (with the
++/// author's replies added at the end). None when nothing changed.
++fn merged_comments<K: Ord + Clone>(was: &BTreeMap<K, Comment>, is: &BTreeMap<K, Comment>, author: &str) -> Option<BTreeMap<K, Comment>> {
++    if was == is {
++        return None;
++    }
++    let mut out = BTreeMap::new();
++    for (cell, before) in was {
++        let after = is.get(cell);
++        if before.author == author || after.is_some_and(|after| only_own_replies(before, after, author)) {
++            if let Some(after) = after {
++                out.insert(cell.clone(), after.clone());
++            }
++        } else {
++            out.insert(cell.clone(), before.clone());
++        }
++    }
++    for (cell, after) in is {
++        if !was.contains_key(cell) && after.author == author {
++            out.insert(cell.clone(), after.clone());
++        }
++    }
++    Some(out)
++}
++
++/// `after` is `before` with only replies by `author` added at the end.
++fn only_own_replies(before: &Comment, after: &Comment, author: &str) -> bool {
++    if after.replies.len() < before.replies.len() {
++        return false;
++    }
++    let mut head = after.clone();
++    head.replies.truncate(before.replies.len());
++    head.dates.truncate(before.dates.len());
++    head == *before && after.replies[before.replies.len()..].iter().all(|(who, _)| who == author)
++}
++
++#[cfg(test)]
++mod tests;
+diff --git a/apps/gridcraft-web/src/access/tests.rs b/apps/gridcraft-web/src/access/tests.rs
+new file mode 100644
+index 0000000..c9f266a
+--- /dev/null
++++ b/apps/gridcraft-web/src/access/tests.rs
+@@ -0,0 +1,150 @@
++//! Access modes (JD Sheets P2-MODE-02, -04, -05, -06, -07).
++#![allow(clippy::unwrap_used, clippy::expect_used)]
++
++use gridcraft_engine::Session;
++use gridcraft_ui_egui::{Services, SheetApp};
++use serde_json::json;
++
++use super::*;
++
++fn app(author: &str) -> SheetApp {
++    let mut session = Session::new();
++    session.new_workbook();
++    let mut app = SheetApp::new(session, Services::default());
++    app.session.prefs.user_name = author.into();
++    app
++}
++
++fn wb(app: &SheetApp) -> Arc<Workbook> {
++    app.session.active().unwrap().wb.clone()
++}
++
++/// Runs a command the way the ribbon and menus do, then ends the frame.
++fn menu(app: &mut SheetApp, gate: &mut Gate, id: &str, params: serde_json::Value) -> bool {
++    let _ = app.run(id, params);
++    gate.enforce(app)
++}
++
++/// Runs a command the way the grid and keyboard shortcuts do (straight to the engine).
++fn key(app: &mut SheetApp, gate: &mut Gate, id: &str, params: serde_json::Value) -> bool {
++    let _ = app.session.run(id, params);
++    gate.enforce(app)
++}
++
++fn comment_at(app: &SheetApp, a1: &str) -> Option<Comment> {
++    let at = gridcraft_engine::core::CellRef::parse(a1).unwrap();
++    wb(app).sheets[0].comments.get(&at).cloned()
++}
++
++#[test]
++fn modes_parse() {
++    assert_eq!(Mode::parse("view"), Some(Mode::View));
++    assert_eq!(Mode::parse("comment"), Some(Mode::Comment));
++    assert_eq!(Mode::parse("edit"), Some(Mode::Edit));
++    assert_eq!(Mode::parse("VIEW"), None);
++    assert!(!Mode::View.saves() && Mode::Comment.saves() && Mode::Edit.saves());
++}
++
++#[test]
++fn view_mode_puts_back_every_change_whatever_the_path() {
++    let mut app = app("Asha");
++    let mut gate = Gate::new(Mode::View);
++    assert!(!gate.enforce(&mut app));
++    let start = wb(&app);
++    let changes: Vec<(&str, serde_json::Value)> = vec![
++        ("cell.set", json!({ "cell": "A1", "input": "typed" })),
++        ("home.bold", json!({ "range": "A1" })),
++        ("home.insertSheet", json!({})),
++        ("review.newComment", json!({ "cell": "B2", "text": "hi", "author": "Asha" })),
++        ("range.setValues", json!({ "range": "A1:B1", "values": [["a", "b"]] })),
++    ];
++    for (id, params) in &changes {
++        assert!(menu(&mut app, &mut gate, id, params.clone()), "{id} by menu");
++        assert_eq!(*wb(&app), *start, "{id} by menu");
++        assert!(key(&mut app, &mut gate, id, params.clone()), "{id} by key");
++        assert_eq!(*wb(&app), *start, "{id} by key");
++    }
++    // Undo cannot bring a change back either, and nothing counts as unsaved.
++    let _ = app.session.run("edit.undo", json!({}));
++    gate.enforce(&mut app);
++    assert_eq!(*wb(&app), *start);
++    assert!(!app.session.active().unwrap().is_dirty());
++    assert_eq!(app.toast.as_ref().map(|(text, _)| text.as_str()), Some(VIEW_NOTICE));
++}
++
++#[test]
++fn looking_around_is_never_put_back() {
++    let mut app = app("Asha");
++    let _ = app.session.run("home.insertSheet", json!({}));
++    let mut gate = Gate::new(Mode::View);
++    gate.enforce(&mut app);
++    for (id, params) in [
++        ("sheet.activate", json!({ "sheet": 0 })),
++        ("selection.set", json!({ "range": "C7" })),
++        ("sheet.activate", json!({ "sheet": 1 })),
++    ] {
++        assert!(!key(&mut app, &mut gate, id, params), "{id}");
++    }
++    assert_eq!(wb(&app).active_sheet(), 1);
++    assert!(app.toast.is_none());
++}
++
++#[test]
++fn comment_mode_keeps_own_comments_only() {
++    let mut app = app("Meera");
++    let _ = app.session.run("review.newComment", json!({ "cell": "A1", "text": "Meera's", "author": "Meera" }));
++    app.session.prefs.user_name = "Asha".into();
++    let mut gate = Gate::new(Mode::Comment);
++    gate.enforce(&mut app);
++
++    // Own comments and notes: kept.
++    assert!(!menu(&mut app, &mut gate, "review.newComment", json!({ "cell": "B2", "text": "Mine" })));
++    assert_eq!(comment_at(&app, "B2").map(|c| c.author), Some("Asha".into()));
++    assert!(!menu(&mut app, &mut gate, "review.newNote", json!({ "cell": "C3", "text": "Note" })));
++    assert!(comment_at(&app, "C3").is_some());
++    // A reply to someone else's thread: kept.
++    assert!(!menu(&mut app, &mut gate, "review.replyComment", json!({ "cell": "A1", "text": "Agreed" })));
++    assert_eq!(comment_at(&app, "A1").unwrap().replies.len(), 1);
++    // Deleting someone else's comment: put back.
++    assert!(menu(&mut app, &mut gate, "review.deleteComment", json!({ "cell": "A1" })));
++    assert_eq!(comment_at(&app, "A1").map(|c| c.text), Some("Meera's".into()));
++    // Deleting your own: kept.
++    assert!(!menu(&mut app, &mut gate, "review.deleteComment", json!({ "cell": "B2" })));
++    assert!(comment_at(&app, "B2").is_none());
++    // Content: put back, with the notice for comment mode.
++    let before = wb(&app);
++    assert!(key(&mut app, &mut gate, "cell.set", json!({ "cell": "D4", "input": "no" })));
++    assert_eq!(*wb(&app), *before);
++    assert_eq!(app.toast.as_ref().map(|(text, _)| text.as_str()), Some(COMMENT_NOTICE));
++}
++
++#[test]
++fn edit_mode_is_gridcraft_as_it_is() {
++    let mut app = app("Asha");
++    let mut gate = Gate::new(Mode::Edit);
++    for (id, params) in [
++        ("cell.set", json!({ "cell": "A1", "input": "typed" })),
++        ("home.insertSheet", json!({})),
++        ("edit.undo", json!({})),
++    ] {
++        assert!(!menu(&mut app, &mut gate, id, params), "{id}");
++    }
++    assert!(app.session.active().unwrap().is_dirty());
++    assert!(app.toast.is_none());
++}
++
++#[test]
++fn switching_mode_takes_effect_at_once_and_keeps_the_view() {
++    let mut app = app("Asha");
++    let mut gate = Gate::new(Mode::Edit);
++    assert!(!menu(&mut app, &mut gate, "cell.set", json!({ "cell": "A1", "input": "mine" })));
++    let _ = app.session.run("selection.set", json!({ "range": "B5" }));
++    gate.set_mode(Mode::View);
++    gate.enforce(&mut app);
++    let edited = wb(&app);
++    assert!(menu(&mut app, &mut gate, "cell.set", json!({ "cell": "A1", "input": "other" })));
++    assert_eq!(*wb(&app), *edited, "the work done in edit mode stays");
++    assert_eq!(app.session.active().unwrap().selection.active.a1(), "B5");
++    gate.set_mode(Mode::Edit);
++    assert!(!menu(&mut app, &mut gate, "cell.set", json!({ "cell": "A1", "input": "again" })));
++}
+diff --git a/apps/gridcraft-web/src/host.rs b/apps/gridcraft-web/src/host.rs
+index 2286023..11bfc37 100644
+--- a/apps/gridcraft-web/src/host.rs
++++ b/apps/gridcraft-web/src/host.rs
+@@ -9,6 +9,10 @@
+ //!   as PDF. The parent stores it and reports failures itself.
+ //! - `gridcraft:dirty` (to the parent): `{ dirty }` whenever unsaved changes appear or go away.
+ //! - `gridcraft:failed` (to the parent): `{ error }` when the app couldn't start.
++//! - `gridcraft:mode` (from the parent): `{ mode }`, `view`, `comment` or `edit`, applied at once
++//!   (`?mode=` sets it on load; see the `access` module). In view mode Save hands nothing over.
++//! - `gridcraft:saveNow` (from the parent): save as File › Save would, for a parent that saves
++//!   by itself (autosave). Ignored in view mode.
+ //!
+ //! Only the parent window on the page's own origin is heard or answered. In host mode the page
+ //! starts with an empty workbook instead of a sample, and the parent guards leaving the page.
+@@ -17,6 +21,8 @@ use std::cell::{Cell, RefCell};
+ use std::rc::Rc;
+ 
+ use gridcraft_ui_egui::{Inbox, Services, SheetApp};
++
++use crate::access::{Gate, Mode};
+ use wasm_bindgen::JsCast as _;
+ use wasm_bindgen::JsValue;
+ use wasm_bindgen::closure::Closure;
+@@ -37,6 +43,12 @@ pub struct Bridge {
+     saved: Rc<RefCell<Vec<String>>>,
+     /// The unsaved-changes state last reported to the parent.
+     reported: Rc<Cell<Option<bool>>>,
++    /// The access mode and what it last allowed.
++    gate: Rc<RefCell<Gate>>,
++    /// A mode the parent asked for, applied after the next frame.
++    next_mode: Rc<Cell<Option<Mode>>>,
++    /// The parent asked for a save.
++    save_now: Rc<Cell<bool>>,
+ }
+ 
+ impl Bridge {
+@@ -48,7 +60,24 @@ impl Bridge {
+             return None;
+         }
+         let origin = window.location().origin().ok()?;
+-        Some(Self { window, parent, origin, saved: Rc::default(), reported: Rc::default() })
++        let mode = window
++            .location()
++            .search()
++            .ok()
++            .and_then(|search| web_sys::UrlSearchParams::new_with_str(&search).ok())
++            .and_then(|params| params.get("mode"))
++            .and_then(|mode| Mode::parse(&mode))
++            .unwrap_or_default();
++        Some(Self {
++            window,
++            parent,
++            origin,
++            saved: Rc::default(),
++            reported: Rc::default(),
++            gate: Rc::new(RefCell::new(Gate::new(mode))),
++            next_mode: Rc::default(),
++            save_now: Rc::default(),
++        })
+     }
+ 
+     /// Send saved and exported files to the parent instead of downloading them, and hear files
+@@ -82,6 +111,13 @@ impl Bridge {
+     /// After each frame: a workbook handed to the parent this frame counts as saved under the
+     /// name it was saved as, and the parent hears when unsaved changes appear or go away.
+     pub fn sync(&self, app: &mut SheetApp) {
++        if let Some(mode) = self.next_mode.take() {
++            self.gate.borrow_mut().set_mode(mode);
++        }
++        self.gate.borrow_mut().enforce(app);
++        if self.save_now.take() && self.gate.borrow().mode().saves() {
++            app.open_dialog("saveAs", serde_json::json!({}));
++        }
+         let saved = std::mem::take(&mut *self.saved.borrow_mut());
+         if let Some(name) = saved.iter().rev().find(|name| is_workbook(name))
+             && let Some(doc) = app.session.active_mut()
+@@ -99,6 +135,10 @@ impl Bridge {
+ 
+     fn post_save(&self, path: &str, bytes: &[u8]) -> Result<(), String> {
+         let name = std::path::Path::new(path).file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| path.to_string());
++        // In view mode a workbook is never handed over (exports such as PDF still are).
++        if is_workbook(&name) && !self.gate.borrow().mode().saves() {
++            return Ok(());
++        }
+         let buffer = js_sys::Uint8Array::from(bytes).buffer();
+         let message = message(&[("type", "gridcraft:save".into()), ("name", name.as_str().into()), ("bytes", buffer.clone().into())])
+             .ok_or_else(|| "couldn't build the message".to_string())?;
+@@ -112,13 +152,28 @@ impl Bridge {
+     fn listen(&self, inbox: Inbox, ctx: egui::Context) {
+         let parent = self.parent.clone();
+         let origin = self.origin.clone();
++        let next_mode = self.next_mode.clone();
++        let save_now = self.save_now.clone();
+         let on_message = Closure::<dyn FnMut(web_sys::MessageEvent)>::new(move |event: web_sys::MessageEvent| {
+             if event.origin() != origin || !event.source().is_some_and(|s| js_sys::Object::is(&s, &parent)) {
+                 return;
+             }
+             let data = event.data();
+-            if string(&data, "type").as_deref() != Some("gridcraft:open") {
+-                return;
++            match string(&data, "type").as_deref() {
++                Some("gridcraft:open") => {}
++                Some("gridcraft:mode") => {
++                    if let Some(mode) = string(&data, "mode").and_then(|m| Mode::parse(&m)) {
++                        next_mode.set(Some(mode));
++                        ctx.request_repaint();
++                    }
++                    return;
++                }
++                Some("gridcraft:saveNow") => {
++                    save_now.set(true);
++                    ctx.request_repaint();
++                    return;
++                }
++                _ => return,
+             }
+             let name = string(&data, "name").filter(|n| !n.trim().is_empty()).unwrap_or_else(|| "Book.xlsx".to_string());
+             let Some(bytes) = bytes(&data) else { return };
+diff --git a/apps/gridcraft-web/src/main.rs b/apps/gridcraft-web/src/main.rs
+index 68bee92..64c05ab 100644
+--- a/apps/gridcraft-web/src/main.rs
++++ b/apps/gridcraft-web/src/main.rs
+@@ -16,6 +16,8 @@
+ //! interface size, editing options…) are kept in `localStorage` (`prefs`).
+ #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
+ 
++#[cfg(any(target_arch = "wasm32", test))]
++mod access;
+ #[cfg(target_arch = "wasm32")]
+ mod host;
+ #[cfg(any(target_arch = "wasm32", test))]

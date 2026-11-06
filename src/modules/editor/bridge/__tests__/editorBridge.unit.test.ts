@@ -16,6 +16,7 @@ function setup(overrides: Partial<BridgeDeps> = {}) {
   const editor = { postMessage: vi.fn() };
   const states: BridgeState[] = [];
   const saves: Array<{ bytes: Uint8Array; base: string; resolve: (o: SaveOutcome) => void }> = [];
+  const saveOptions: Array<{ autosave: boolean }> = [];
   const deps: BridgeDeps = {
     host: {
       addEventListener: (_type: string, fn: unknown) => {
@@ -31,7 +32,10 @@ function setup(overrides: Partial<BridgeDeps> = {}) {
       ok: true,
       workbook: { name: "Budget.xlsx", bytes: new Uint8Array([80, 75, 1]).buffer, versionId: "v1" },
     }),
-    save: (bytes, base) => new Promise((resolve) => saves.push({ bytes, base, resolve })),
+    save: (bytes, base, options) => {
+      saveOptions.push(options);
+      return new Promise((resolve) => saves.push({ bytes, base, resolve }));
+    },
     download: vi.fn(),
     onChange: (state) => states.push(state),
     ...overrides,
@@ -45,7 +49,7 @@ function setup(overrides: Partial<BridgeDeps> = {}) {
       source: "source" in from ? from.source : editor,
     } as MessageEvent);
   const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-  return { bridge, editor, states, saves, send, flush, deps };
+  return { bridge, editor, states, saves, saveOptions, send, flush, deps };
 }
 
 const bytes = (...values: number[]) => new Uint8Array(values).buffer;
@@ -217,5 +221,44 @@ describe("unsaved state (P0-BRIDGE-05, P0-BRIDGE-06, P0-BRIDGE-09)", () => {
     t.send({ type: MESSAGE.ready });
     await t.flush();
     expect(t.editor.postMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("patch 0001 messages (P2-MODE-05, P2-SAVE-01)", () => {
+  async function opened() {
+    const t = setup();
+    t.send({ type: MESSAGE.ready });
+    await t.flush();
+    return t;
+  }
+
+  it("switches the editor's mode at once, on our origin only", async () => {
+    const t = await opened();
+    t.bridge.setMode("view");
+    expect(t.editor.postMessage).toHaveBeenLastCalledWith(
+      { type: MESSAGE.mode, mode: "view" },
+      ORIGIN,
+    );
+  });
+
+  it("asks the editor to save and marks the save it hands over as an autosave", async () => {
+    const t = await opened();
+    t.bridge.saveNow();
+    expect(t.editor.postMessage).toHaveBeenLastCalledWith({ type: MESSAGE.saveNow }, ORIGIN);
+    t.send({ type: MESSAGE.save, name: "Budget.xlsx", bytes: bytes(1, 2) });
+    expect(t.saveOptions.at(-1)).toEqual({ autosave: true });
+    t.saves[0]!.resolve({ ok: true, versionId: "v2" });
+    await t.flush();
+    t.send({ type: MESSAGE.save, name: "Budget.xlsx", bytes: bytes(3) });
+    expect(t.saveOptions.at(-1)).toEqual({ autosave: false });
+  });
+
+  it("lists the new messages in the shared contract file", () => {
+    const contract = JSON.parse(readFileSync("contracts/bridge/messages.json", "utf8"));
+    expect(contract.toEditor.map((m: { type: string }) => m.type)).toEqual([
+      MESSAGE.open,
+      MESSAGE.mode,
+      MESSAGE.saveNow,
+    ]);
   });
 });

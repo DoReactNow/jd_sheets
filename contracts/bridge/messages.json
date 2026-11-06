@@ -1,11 +1,16 @@
 {
-  "source": "vendor/gridcraft/apps/gridcraft-web/src/host.rs at the pinned tag",
+  "source": "vendor/gridcraft/apps/gridcraft-web/src/host.rs at the pinned tag, with patches/gridcraft/0001-access-mode.patch",
   "fromEditor": [
     { "type": "gridcraft:ready", "version": "0.16.1" },
     { "type": "gridcraft:dirty", "dirty": true },
     { "type": "gridcraft:save", "name": "Budget.xlsx", "bytes": "<ArrayBuffer>" },
     { "type": "gridcraft:failed", "error": "<text, never shown to users>" }
   ],
-  "toEditor": [{ "type": "gridcraft:open", "name": "Budget.xlsx", "bytes": "<ArrayBuffer>" }],
-  "query": "?host=parent&chrome=notitlebar&author=<display name>"
+  "toEditor": [
+    { "type": "gridcraft:open", "name": "Budget.xlsx", "bytes": "<ArrayBuffer>" },
+    { "type": "gridcraft:mode", "mode": "view" },
+    { "type": "gridcraft:saveNow" }
+  ],
+  "modes": ["edit", "comment", "view"],
+  "query": "?host=parent&chrome=notitlebar&author=<display name>&mode=<edit|comment|view>"
 }

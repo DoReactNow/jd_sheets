@@ -15,7 +15,6 @@ export type LeaseState =
   | { status: "VIEW_ONLY" };
 
 export function createLeaseService({ clock = systemClock }: { clock?: Clock } = {}) {
-
   async function whoHolds(principal: Principal, workbookId: string): Promise<LeaseState | null> {
     const current = await leaseRepository.current(workbookId, clock.now());
     if (!current) return null;

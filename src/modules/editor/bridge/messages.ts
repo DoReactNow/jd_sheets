@@ -11,7 +11,21 @@ export const MESSAGE = {
   save: `${P}save`,
   dirty: `${P}dirty`,
   failed: `${P}failed`,
+  // Patch 0001 (Decision 43): the access mode and "save now" for autosave.
+  mode: `${P}mode`,
+  saveNow: `${P}saveNow`,
 } as const;
+
+/** What the person may do in the editor (patch 0001): from their role and the edit lease. */
+export type EditorMode = "edit" | "comment" | "view";
+
+export function modeMessage(mode: EditorMode): { type: string; mode: EditorMode } {
+  return { type: MESSAGE.mode, mode };
+}
+
+export function saveNowMessage(): { type: string } {
+  return { type: MESSAGE.saveNow };
+}
 
 export type IncomingMessage =
   | { type: "ready"; version: string | null }

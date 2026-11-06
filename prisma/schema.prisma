@@ -352,7 +352,7 @@ enum ShareRole {
 model ShareGrant {
   id          String    @id @default(uuid(7)) @db.Uuid
   workbookId  String    @map("workbook_id") @db.Uuid
-  workbook    Workbook  @relation(fields: [workbookId], references: [id], onDelete: Restrict)
+  workbook    Workbook  @relation(fields: [workbookId], references: [id], onDelete: Cascade)
   userId      String?   @map("user_id") @db.Uuid
   user        User?     @relation("GrantUser", fields: [userId], references: [id], onDelete: Restrict)
   groupId     String?   @map("group_id") @db.Uuid
@@ -373,7 +373,7 @@ model ShareGrant {
 // Owner: sharing. First time a person opened a workbook through the company link (Decision 52).
 model LinkOpen {
   workbookId    String   @map("workbook_id") @db.Uuid
-  workbook      Workbook @relation(fields: [workbookId], references: [id], onDelete: Restrict)
+  workbook      Workbook @relation(fields: [workbookId], references: [id], onDelete: Cascade)
   userId        String   @map("user_id") @db.Uuid
   user          User     @relation(fields: [userId], references: [id], onDelete: Restrict)
   firstOpenedAt DateTime @map("first_opened_at") @db.Timestamptz(3)

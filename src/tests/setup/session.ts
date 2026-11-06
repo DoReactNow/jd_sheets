@@ -3,6 +3,8 @@
 import { POST as signInRoute } from "@/app/api/auth/sign-in/route";
 import { createSessionPrincipalResolver } from "@/modules/identity";
 import { networkService } from "@/modules/network";
+import { resolveWorkbookRoleWithSharing } from "@/modules/sharing";
+import { configureWorkbookRoleResolver } from "@/shared/rbac/workbookAccess";
 import { getEnv } from "@/shared/config/env";
 import { configureNetworkGuard } from "@/shared/http/networkGuard";
 import {
@@ -16,6 +18,7 @@ export function installRealResolvers(): void {
   setPrincipalResolverForTests(null);
   configurePrincipalResolver(createSessionPrincipalResolver());
   configureNetworkGuard((request) => networkService.check(request));
+  configureWorkbookRoleResolver(resolveWorkbookRoleWithSharing);
   networkService.invalidate();
 }
 

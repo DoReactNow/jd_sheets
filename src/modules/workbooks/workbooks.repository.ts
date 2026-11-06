@@ -1,6 +1,8 @@
 // Database access for the workbooks module. Writes only workbooks_* tables. No business rules.
 import { getPrisma } from "@/shared/db/prisma";
-import { Prisma, type WorkbookVersionSource } from "@/generated/prisma/client";
+import { Prisma, type ShareRole, type WorkbookVersionSource } from "@/generated/prisma/client";
+
+export type Tx = Prisma.TransactionClient;
 
 export interface WorkbookRow {
   id: string;
@@ -122,3 +124,32 @@ export const workbooksRepository = {
 };
 
 export type WorkbooksRepository = typeof workbooksRepository;
+
+/**
+ * Writes other modules make to workbook rows inside their own transaction (the sharing module's
+ * company link, download setting and ownership transfer). Only workbook columns.
+ */
+export const workbookRecords = {
+  sharingSettings(id: string, tx?: Tx) {
+    return (tx ?? getPrisma()).workbook.findFirst({
+      where: { id, trashedAt: null },
+      select: {
+        id: true,
+        title: true,
+        ownerId: true,
+        linkRole: true,
+        allowDownloadForReaders: true,
+      },
+    });
+  },
+  async updateSharingSettings(
+    tx: Tx,
+    id: string,
+    data: { linkRole?: ShareRole | null; allowDownloadForReaders?: boolean },
+  ): Promise<void> {
+    await tx.workbook.update({ where: { id }, data });
+  },
+  async setOwner(tx: Tx, id: string, ownerId: string): Promise<void> {
+    await tx.workbook.update({ where: { id }, data: { ownerId } });
+  },
+};

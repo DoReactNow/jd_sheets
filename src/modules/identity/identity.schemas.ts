@@ -79,3 +79,25 @@ export const resetPasswordInput = z.object({
     .max(MAX_PASSWORD_LENGTH * 4)
     .optional(),
 });
+
+// --- groups (Phase 2) -------------------------------------------------------------------------
+
+export const groupNameSchema = z
+  .string({ error: "Enter a group name." })
+  .trim()
+  .min(1, { error: "Enter a group name." })
+  .max(80, { error: "Group names can be up to 80 characters." })
+  .refine((value) => !/\p{Cc}/u.test(value), {
+    error: "Group names can't contain special characters.",
+  });
+
+export const groupInput = z.object({ name: groupNameSchema });
+
+export const groupListInput = z.object({ q: z.string().trim().max(80).optional() });
+
+export const addMembersInput = z.object({
+  userIds: z
+    .array(z.uuid({ error: "Choose people from the list." }), { error: "Choose people to add." })
+    .min(1, { error: "Choose people to add." })
+    .max(200, { error: "Add up to 200 people at a time." }),
+});

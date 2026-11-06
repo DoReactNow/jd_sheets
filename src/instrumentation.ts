@@ -21,10 +21,10 @@ export async function register(): Promise<void> {
   const { createSessionPrincipalResolver } = await import("@/modules/identity");
   configurePrincipalResolver(createSessionPrincipalResolver());
 
-  // Workbook roles: owner only until the sharing module (Phase 2).
+  // Workbook roles: owner, direct and group grants and the company link (Phase 2).
   const { configureWorkbookRoleResolver } = await import("@/shared/rbac/workbookAccess");
-  const { resolveWorkbookRoleForOwner } = await import("@/modules/workbooks");
-  configureWorkbookRoleResolver(resolveWorkbookRoleForOwner);
+  const { resolveWorkbookRoleWithSharing } = await import("@/modules/sharing");
+  configureWorkbookRoleResolver(resolveWorkbookRoleWithSharing);
 
   // The network rules for every page and API route (Decisions 18, 46).
   const { configureNetworkGuard } = await import("@/shared/http/networkGuard");

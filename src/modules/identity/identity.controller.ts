@@ -11,6 +11,7 @@ import { authService } from "./identity.auth";
 import { enqueueOtpMail } from "./identity.jobs";
 import * as schemas from "./identity.schemas";
 import { createSignupService } from "./identity.signup";
+import { groupsService } from "./identity.groups";
 
 export { schemas as identitySchemas };
 
@@ -181,5 +182,51 @@ export const identityController = {
         meta(context.request),
       ),
     };
+  },
+
+  // --- groups (Phase 2) ----------------------------------------------------------------------
+  async listGroups({ input }: Ctx<z.output<typeof schemas.groupListInput>>) {
+    return { data: { groups: await groupsService.list(input.q) } };
+  },
+  async getGroup({ params }: Ctx<undefined, { id: string }>) {
+    return { data: await groupsService.get(params.id) };
+  },
+  async createGroup(context: Ctx<z.output<typeof schemas.groupInput>>) {
+    return {
+      status: 201,
+      data: await groupsService.create(
+        principalOf(context),
+        context.input.name,
+        meta(context.request),
+      ),
+    };
+  },
+  async renameGroup(context: Ctx<z.output<typeof schemas.groupInput>, { id: string }>) {
+    return {
+      data: await groupsService.rename(
+        principalOf(context),
+        context.params.id,
+        context.input.name,
+        meta(context.request),
+      ),
+    };
+  },
+  async addGroupMembers(context: Ctx<z.output<typeof schemas.addMembersInput>, { id: string }>) {
+    const added = await groupsService.addMembers(
+      principalOf(context),
+      context.params.id,
+      context.input.userIds,
+      meta(context.request),
+    );
+    return { data: { added } };
+  },
+  async removeGroupMember(context: Ctx<undefined, { id: string; userId: string }>) {
+    await groupsService.removeMember(
+      principalOf(context),
+      context.params.id,
+      context.params.userId,
+      meta(context.request),
+    );
+    return { data: ok };
   },
 };

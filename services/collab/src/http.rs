@@ -24,6 +24,19 @@ const XLSX_MEDIA_TYPE: &str = "application/vnd.openxmlformats-officedocument.spr
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
+    /// Live editing rooms (Phase 3).
+    pub rooms: Arc<crate::rooms::Rooms>,
+}
+
+impl AppState {
+    pub fn new(config: Config) -> AppState {
+        let app = crate::app_client::AppClient::new(&config.app_url, &config.internal_service_token);
+        let rooms = Arc::new(crate::rooms::Rooms::new(app, config.limits.clone()));
+        AppState {
+            config: Arc::new(config),
+            rooms,
+        }
+    }
 }
 
 pub fn router(state: AppState) -> Router {
@@ -36,6 +49,7 @@ pub fn router(state: AppState) -> Router {
         .route("/internal/workbooks/validate", post(validate))
         .route("/internal/workbooks/blank", post(blank))
         .route("/internal/workbooks/convert", post(convert))
+        .route("/internal/access-changed", post(access_changed))
         .layer(DefaultBodyLimit::max(body_limit))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_internal_token));
     // diff-kind carries two workbooks in one body.
@@ -45,6 +59,7 @@ pub fn router(state: AppState) -> Router {
         .route_layer(middleware::from_fn_with_state(state.clone(), require_internal_token));
     Router::new()
         .route("/health", get(health))
+        .route("/collab/{workbook_id}", get(crate::ws::upgrade))
         .merge(internal)
         .merge(two)
         .fallback(not_found)
@@ -192,4 +207,10 @@ async fn convert(State(state): State<AppState>, Query(query): Query<HashMap<Stri
             ApiError::new(code, id).into_response()
         }
     }
+}
+
+/// POST /internal/access-changed — see [`crate::ws::access_changed`].
+async fn access_changed(State(state): State<AppState>, axum::Json(body): axum::Json<serde_json::Value>) -> Response {
+    crate::ws::access_changed(&state, &body).await;
+    (StatusCode::OK, axum::Json(json!({ "data": { "ok": true } }))).into_response()
 }

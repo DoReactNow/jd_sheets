@@ -27,8 +27,11 @@ gridcraft-xlsx = { path = "../../vendor/gridcraft/crates/xlsx" }
 # Same zip major as GridCraft, for the archive pre-checks.
 zip = { version = "3", default-features = false, features = ["deflate"] }
 
-axum = "0.8"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "time"] }
+axum = { version = "0.8", features = ["ws"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "time", "sync"] }
+# Live editing (Phase 3): calls to the app's internal routes (plain HTTP on the private network).
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 jsonwebtoken = { version = "9", default-features = false }
@@ -42,6 +45,7 @@ gridcraft-xlsx = { path = "../../vendor/gridcraft/crates/xlsx", features = ["tes
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 proptest = "1"
+tokio-tungstenite = "0.29"
 
 [lints.rust]
 unsafe_code = "forbid"

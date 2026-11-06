@@ -238,11 +238,23 @@ impl Access {
     }
 }
 
+/// Someone else's selection while editing live (JD Sheets, Phase 3), drawn as a coloured outline
+/// with their name.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RemoteSelection {
+    pub name: String,
+    pub colour: egui::Color32,
+    pub sheet_name: String,
+    pub range: gridcraft_engine::core::RangeRef,
+}
+
 pub struct SheetApp {
     pub session: Session,
     pub ui: UiState,
     /// What the person may change; greys out the ribbon (see [`Access`]).
     pub access: Access,
+    /// Others' selections while editing live.
+    pub remote_selections: Vec<RemoteSelection>,
     /// The window chrome to draw (see [`Chrome`]).
     pub chrome: Chrome,
     /// Scroll position per (window id, sheet index).

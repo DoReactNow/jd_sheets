@@ -6,12 +6,17 @@
 // Only messages from the editor's own window, on our own origin, are heard (P0-BRIDGE-02).
 // Everything outside (network, DOM, navigation) is injected, so it is tested without a browser.
 import {
+  applyMessage,
   isWorkbookFile,
+  liveStartMessage,
   modeMessage,
   openMessage,
   parseIncoming,
+  presenceMessage,
+  resyncMessage,
   saveNowMessage,
   type EditorMode,
+  type PresencePerson,
 } from "./messages";
 
 export type BridgeStatus =
@@ -66,6 +71,17 @@ export interface BridgeDeps {
   /** Files the editor hands over that are not the workbook (PDF exports) are downloaded. */
   download: (name: string, bytes: Uint8Array) => void;
   onChange: (state: BridgeState) => void;
+  /**
+   * Live editing (Phase 3): asked right after the workbook is opened; a sequence number makes
+   * the editor go live there (the workbook then came from the server, not from load()).
+   */
+  liveStart?: () => number | null;
+  /** Live editing (Phase 3): a change this person made, for the server. */
+  onCommand?: (clientCommandId: string, baseSeq: number, step: unknown) => void;
+  /** Live editing: the editor no longer agrees with the server and needs its workbook. */
+  onResyncNeeded?: () => void;
+  /** Live editing: where this person is, for presence. */
+  onSelection?: (sheetName: string, range: string) => void;
 }
 
 export interface EditorBridge {
@@ -80,6 +96,14 @@ export interface EditorBridge {
   setMode(mode: EditorMode): void;
   /** Asks the editor to save, for autosave; the save it hands over is marked as one. */
   saveNow(): void;
+  /** Live editing: the server's workbook replaces the editor's (resync). */
+  resync(name: string, bytes: ArrayBuffer, seq: number): void;
+  /** Live editing: an applied or rejected change from the server. */
+  apply(message: unknown): void;
+  /** Live editing: where the others are. */
+  presence(people: PresencePerson[]): void;
+  /** True once the editor is live: its saves are the server's business, not ours. */
+  isLive(): boolean;
 }
 
 export function createEditorBridge(deps: BridgeDeps): EditorBridge {
@@ -90,6 +114,7 @@ export function createEditorBridge(deps: BridgeDeps): EditorBridge {
   let conflicted: Uint8Array | null = null;
   let loaded = false;
   let autosaveRequested = false;
+  let live = false;
 
   const set = (next: Partial<BridgeState>) => {
     state = { ...state, ...next };
@@ -112,6 +137,11 @@ export function createEditorBridge(deps: BridgeDeps): EditorBridge {
     deps
       .editor()
       ?.postMessage(openMessage(workbook.name, workbook.bytes), deps.origin, [workbook.bytes]);
+    const seq = deps.liveStart?.() ?? null;
+    if (seq !== null) {
+      live = true;
+      deps.editor()?.postMessage(liveStartMessage(seq), deps.origin);
+    }
     set({ status: "saved", message: null });
   }
 
@@ -149,6 +179,7 @@ export function createEditorBridge(deps: BridgeDeps): EditorBridge {
       deps.download(name, bytes);
       return;
     }
+    if (live) return; // live: every change is already stored by the server
     if (state.status === "conflict" || !state.baseVersionId) return;
     if (saving) {
       pending = bytes; // only the newest pending save matters; it runs after the current one
@@ -177,6 +208,15 @@ export function createEditorBridge(deps: BridgeDeps): EditorBridge {
       case "failed":
         set({ status: "editor-failed", message: null });
         break;
+      case "command":
+        deps.onCommand?.(message.clientCommandId, message.baseSeq, message.step);
+        break;
+      case "resyncNeeded":
+        deps.onResyncNeeded?.();
+        break;
+      case "selection":
+        deps.onSelection?.(message.sheetName, message.range);
+        break;
     }
   };
 
@@ -188,6 +228,12 @@ export function createEditorBridge(deps: BridgeDeps): EditorBridge {
       dirty || saving || pending !== null || ["conflict", "save-failed"].includes(state.status),
     conflictedBytes: () => conflicted,
     setMode: (mode) => deps.editor()?.postMessage(modeMessage(mode), deps.origin),
+    resync(name, bytes, seq) {
+      deps.editor()?.postMessage(resyncMessage(name, bytes, seq), deps.origin, [bytes]);
+    },
+    apply: (message) => deps.editor()?.postMessage(applyMessage(message), deps.origin),
+    presence: (people) => deps.editor()?.postMessage(presenceMessage(people), deps.origin),
+    isLive: () => live,
     saveNow: () => {
       if (!loaded || state.status === "conflict") return;
       autosaveRequested = true;

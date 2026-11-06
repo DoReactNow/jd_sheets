@@ -14,6 +14,14 @@ export const MESSAGE = {
   // Access mode (Decisions 43, 55): the access mode and "save now" for autosave.
   mode: `${P}mode`,
   saveNow: `${P}saveNow`,
+  // Live editing (Phase 3, Decision 22).
+  live: `${P}live`,
+  command: `${P}command`,
+  apply: `${P}apply`,
+  resync: `${P}resync`,
+  resyncNeeded: `${P}resyncNeeded`,
+  selection: `${P}selection`,
+  presence: `${P}presence`,
 } as const;
 
 /** What the person may do in the editor (access mode): from their role and the edit lease. */
@@ -28,6 +36,9 @@ export function saveNowMessage(): { type: string } {
 }
 
 export type IncomingMessage =
+  | { type: "command"; clientCommandId: string; baseSeq: number; step: unknown }
+  | { type: "resyncNeeded" }
+  | { type: "selection"; sheetName: string; range: string }
   | { type: "ready"; version: string | null }
   | { type: "save"; name: string; bytes: Uint8Array }
   | { type: "dirty"; dirty: boolean }
@@ -60,6 +71,28 @@ export function parseIncoming(
     }
     case MESSAGE.failed:
       return { type: "failed" };
+    case MESSAGE.resyncNeeded:
+      return { type: "resyncNeeded" };
+    case MESSAGE.selection: {
+      const sheetName = field(data, "sheetName");
+      const range = field(data, "range");
+      if (typeof sheetName !== "string" || typeof range !== "string") return null;
+      if (sheetName.length > 100 || range.length > 50) return null;
+      return { type: "selection", sheetName, range };
+    }
+    case MESSAGE.command: {
+      const clientCommandId = field(data, "clientCommandId");
+      const baseSeq = field(data, "baseSeq");
+      const step = field(data, "step");
+      if (typeof clientCommandId !== "string" || clientCommandId.length > 80) return null;
+      if (typeof baseSeq !== "number" || !Number.isInteger(baseSeq) || baseSeq < 0) return null;
+      if (typeof step !== "string" || step.length > maxBytes) return null;
+      try {
+        return { type: "command", clientCommandId, baseSeq, step: JSON.parse(step) as unknown };
+      } catch {
+        return null;
+      }
+    }
     case MESSAGE.save: {
       const name = field(data, "name");
       const raw = field(data, "bytes");
@@ -81,6 +114,30 @@ export function openMessage(
   bytes: ArrayBuffer,
 ): { type: string; name: string; bytes: ArrayBuffer } {
   return { type: MESSAGE.open, name, bytes };
+}
+
+export function liveStartMessage(seq: number) {
+  return { type: MESSAGE.live, seq };
+}
+
+/** `message` is the JSON text of what the server sent: an applied or a rejected change. */
+export function applyMessage(message: unknown) {
+  return { type: MESSAGE.apply, message: JSON.stringify(message) };
+}
+
+export function resyncMessage(name: string, bytes: ArrayBuffer, seq: number) {
+  return { type: MESSAGE.resync, name, bytes, seq };
+}
+
+export interface PresencePerson {
+  name: string;
+  colour: string;
+  sheetName: string;
+  range: string;
+}
+
+export function presenceMessage(people: PresencePerson[]) {
+  return { type: MESSAGE.presence, people: JSON.stringify(people) };
 }
 
 /** True for the file kind the editor hands over on Save (an .xlsx workbook). */

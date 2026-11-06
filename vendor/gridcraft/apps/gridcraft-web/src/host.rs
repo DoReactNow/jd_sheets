@@ -19,6 +19,9 @@
 //!   what the server ordered as `gridcraft:apply { message }` (JSON text of
 //!   `gridcraft_engine::live::Incoming`). `gridcraft:resync { name, bytes, seq }` replaces the
 //!   workbook with the server's; `gridcraft:resyncNeeded` (to the parent) asks for one.
+//!   `gridcraft:selection { sheetName, range }` (to the parent) says where this person is, and
+//!   `gridcraft:presence { people }` (from the parent, JSON text of `[{name, colour, sheetName,
+//!   range}]`) shows where the others are.
 //!
 //! Only the parent window on the page's own origin is heard or answered. In host mode the page
 //! starts with an empty workbook instead of a sample, and the parent guards leaving the page.
@@ -34,6 +37,7 @@ use crate::access::{Gate, Mode};
 
 /// Live co-editing messages from the parent, handled after the next frame.
 enum LiveMessage {
+    Presence(Vec<gridcraft_ui_egui::RemoteSelection>),
     Start { seq: u64 },
     Message(Incoming),
     Resync { name: String, bytes: Vec<u8>, seq: u64 },
@@ -67,6 +71,8 @@ pub struct Bridge {
     /// Live co-editing: messages waiting, and the editor's side once started.
     live_inbox: Rc<RefCell<Vec<LiveMessage>>>,
     live: Rc<RefCell<Option<Client>>>,
+    /// The selection last reported to the parent (presence).
+    reported_selection: Rc<RefCell<Option<(String, String)>>>,
 }
 
 impl Bridge {
@@ -97,6 +103,7 @@ impl Bridge {
             save_now: Rc::default(),
             live_inbox: Rc::default(),
             live: Rc::default(),
+            reported_selection: Rc::default(),
         })
     }
 
@@ -178,6 +185,7 @@ impl Bridge {
                     incoming.clear();
                 }
                 LiveMessage::Message(m) => incoming.push(m),
+                LiveMessage::Presence(people) => app.remote_selections = people,
             }
         }
         let mut live = self.live.borrow_mut();
@@ -186,9 +194,17 @@ impl Bridge {
         if reverted || self.gate.borrow().mode() == Mode::View {
             let _ = app.session.take_live_steps();
         } else {
+            // The sequence number seen when these changes were made: the server shifts them
+            // through others' row and column edits made since.
+            let base_seq = client.seq as f64;
             for (id, step) in client.outgoing(&mut app.session) {
                 if let Ok(text) = serde_json::to_string(&step) {
-                    self.send(&[("type", "gridcraft:command".into()), ("clientCommandId", id.as_str().into()), ("step", text.as_str().into())]);
+                    self.send(&[
+                        ("type", "gridcraft:command".into()),
+                        ("clientCommandId", id.as_str().into()),
+                        ("baseSeq", base_seq.into()),
+                        ("step", text.as_str().into()),
+                    ]);
                 }
             }
         }
@@ -201,6 +217,16 @@ impl Bridge {
         // Others' changes are not this person's: the mode keeps them.
         self.gate.borrow_mut().accept(app);
         client.end_frame(&app.session);
+        // Where this person is, when it changed (presence).
+        if let Some(doc) = app.session.active() {
+            let sheet = doc.wb.active().map(|s| s.name.clone()).unwrap_or_default();
+            let range = doc.selection.current().a1();
+            let now = Some((sheet.clone(), range.clone()));
+            if *self.reported_selection.borrow() != now {
+                *self.reported_selection.borrow_mut() = now;
+                self.send(&[("type", "gridcraft:selection".into()), ("sheetName", sheet.as_str().into()), ("range", range.as_str().into())]);
+            }
+        }
     }
 
     fn post_save(&self, path: &str, bytes: &[u8]) -> Result<(), String> {
@@ -255,6 +281,28 @@ impl Bridge {
                         live_inbox.borrow_mut().push(LiveMessage::Message(m));
                         ctx.request_repaint();
                     }
+                    return;
+                }
+                Some("gridcraft:presence") => {
+                    let people = string(&data, "people").and_then(|t| serde_json::from_str::<Vec<serde_json::Value>>(&t).ok()).unwrap_or_default();
+                    let selections = people
+                        .iter()
+                        .filter_map(|p| {
+                            let range = gridcraft_engine::core::RangeRef::parse(p["range"].as_str()?).or_else(|| {
+                                gridcraft_engine::core::CellRef::parse(p["range"].as_str()?).map(gridcraft_engine::core::RangeRef::cell)
+                            })?;
+                            let hex = p["colour"].as_str()?.trim_start_matches('#');
+                            let rgb = u32::from_str_radix(hex, 16).ok()?;
+                            Some(gridcraft_ui_egui::RemoteSelection {
+                                name: p["name"].as_str()?.chars().take(40).collect(),
+                                colour: egui::Color32::from_rgb((rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8),
+                                sheet_name: p["sheetName"].as_str()?.to_string(),
+                                range,
+                            })
+                        })
+                        .collect();
+                    live_inbox.borrow_mut().push(LiveMessage::Presence(selections));
+                    ctx.request_repaint();
                     return;
                 }
                 Some("gridcraft:resync") => {

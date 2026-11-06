@@ -1,27 +1,17 @@
 # Upstream pull request for patch 0001 (Decision 53)
 
-The owner opens this on https://github.com/storytold/gridcraft (or asks Claude to open it from
-`DoReactNow`), then replaces `Upstream: pending …` in the patch's first line with the link.
+Opened 2026-11-06 from `DoReactNow`: https://github.com/storytold/gridcraft/pull/3463
 
-**Title:** gridcraft-web: access modes for host pages (`?mode=view|comment|edit`) and `gridcraft:saveNow`
+Upstream `main` had already moved the host bridge onto `craft-web-host` (storytold/craft-libs), so
+the pull request is a port, not this exact patch:
 
-**Body:**
+- **Included:** the access gate (`src/access.rs`, with the same 6 tests) and `?mode=` on load. In
+  view mode a workbook is never handed to the host.
+- **Not included:** `gridcraft:mode` (change the mode while open) and `gridcraft:saveNow`. Both
+  need new message variants in `craft-web-host`, so they start in `storytold/craft-libs`. They are
+  offered as a follow-up.
+- **Also offered as a follow-up:** greying out the ribbon's editing commands (Decision 54).
 
-Pages that embed GridCraft with `?host=parent` sometimes show a workbook to people who may only
-read it, or only comment on it. This adds an access mode to the host bridge:
-
-- `?mode=view|comment|edit` on load, and `gridcraft:mode { mode }` from the parent at any time.
-- **View:** any change to the workbook is put back after the frame that made it, with a short
-  notice; Save hands nothing to the parent (exports such as PDF still do).
-- **Comment:** only the user's own notes and comments are kept (the author from `?author=`), plus
-  their replies added to someone else's thread.
-- **Edit** (the default) behaves exactly as today.
-- What a person only looks at (active sheet, zoom, scroll, page view) is never put back.
-- `gridcraft:saveNow`: save as File › Save would, for parents that autosave.
-
-The rule is applied in `apps/gridcraft-web` after each frame, so it holds whatever path made the
-change (typing, paste, ribbon, menus, keyboard shortcuts, undo, dialogs) without touching the
-engine or the UI crate. Tests: `apps/gridcraft-web/src/access/tests.rs` (`cargo test -p gridcraft-web`).
-
-A possible follow-up, if you prefer it: greying out the ribbon's editing commands in view and
-comment mode would need a small public hook in `gridcraft-ui-egui`; happy to send that separately.
+Our patch stays on v0.16.1 until a GridCraft release includes the change. Then we bump the
+submodule and drop what upstream covers (the mode and save-now messages may remain as a smaller
+patch).

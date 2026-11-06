@@ -790,6 +790,7 @@ Because office addresses change, a change can leave everyone outside the allowed
 #### Decision
 - Claude writes `patches/gridcraft/0001-access-mode.patch` and the upstream pull request text (`patches/gridcraft/0001-access-mode.upstream.md`). The owner opens the pull request on `storytold/gridcraft` (or tells Claude to open it from `DoReactNow`).
 - Until then the patch header reads `Upstream: pending (see 0001-access-mode.upstream.md)`; the patch check (P2-MODE-01) accepts `pending` only together with that file, and Phase 4 acceptance requires a real link.
+- **Done 2026-11-06** (owner: "Yes, open it"): https://github.com/storytold/gridcraft/pull/3463, from the `DoReactNow` fork. Upstream had moved its bridge to `craft-web-host`, so the pull request carries the gate and `?mode=`. The `gridcraft:mode` and `gridcraft:saveNow` messages need a `storytold/craft-libs` change first and are offered as a follow-up (details in `0001-access-mode.upstream.md`).
 
 ---
 

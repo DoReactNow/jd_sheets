@@ -1,4 +1,4 @@
-Upstream: pending (see 0001-access-mode.upstream.md)
+Upstream: https://github.com/storytold/gridcraft/pull/3463
 Subject: gridcraft-web: access modes for host pages (view, comment, edit) and "save now"
 
 JD Sheets patch 0001 (Decisions 8, 43, 53). A host page opens GridCraft with ?mode=view|comment|edit

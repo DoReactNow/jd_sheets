@@ -35,3 +35,16 @@ export const listWorkbooksInput = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 export type ListWorkbooksInput = z.output<typeof listWorkbooksInput>;
+
+/** A random id per editor page (tab), for the edit lease (Decision 52). */
+export const tabIdSchema = z
+  .string({ error: "Please reload the page." })
+  .regex(/^[A-Za-z0-9_-]{8,64}$/, { error: "Please reload the page." });
+
+export const leaseInput = z.object({
+  tabId: tabIdSchema,
+  takeOver: z.boolean().optional().default(false),
+});
+export type LeaseInput = z.output<typeof leaseInput>;
+
+export const releaseLeaseInput = z.object({ tabId: tabIdSchema });

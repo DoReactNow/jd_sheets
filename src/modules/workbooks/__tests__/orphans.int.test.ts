@@ -9,11 +9,13 @@ import { createWorkbookValidator, minimalXlsx } from "@/shared/validator";
 import { createTestUser, resetWithRoles } from "@/tests/setup/users";
 import { resetTestStorage } from "@/tests/setup/testStorage";
 import { workbooksRepository } from "../workbooks.repository";
+import { createLeaseService } from "../workbooks.lease";
 import { createWorkbooksService } from "../workbooks.service";
 
 const quiet = { info: () => undefined, warn: () => undefined, error: () => undefined };
 const clock = createTestClock("2027-01-10T00:00:00Z");
 const service = createWorkbooksService({
+  lease: createLeaseService({ clock }),
   repository: workbooksRepository,
   storage: getFileStorage(),
   validator: createWorkbookValidator("fake"),

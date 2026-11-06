@@ -4,7 +4,7 @@ import { APP_CONFIG } from "@/shared/config/appConfig";
 import { collabRequest } from "@/shared/collab/client";
 import { AppError } from "@/shared/errors/AppError";
 import { isErrorCode } from "@/shared/errors/errorCatalog";
-import type { WorkbookSummary, WorkbookValidator } from "../workbookValidator";
+import type { DiffKind, WorkbookSummary, WorkbookValidator } from "../workbookValidator";
 
 async function failure(response: Response): Promise<AppError> {
   const body = (await response.json().catch(() => null)) as { error?: { code?: unknown } } | null;
@@ -37,6 +37,33 @@ export function createCollabValidator(): WorkbookValidator {
     },
     async blank() {
       const response = await collabRequest("/internal/workbooks/blank", { method: "POST" });
+      if (!response.ok) throw await failure(response);
+      return new Uint8Array(await response.arrayBuffer());
+    },
+    async diffKind(base, next, author) {
+      const body = new Uint8Array(base.byteLength + next.byteLength);
+      body.set(base, 0);
+      body.set(next, base.byteLength);
+      const response = await collabRequest(
+        `/internal/workbooks/diff-kind?author=${encodeURIComponent(author)}`,
+        {
+          method: "POST",
+          body,
+          contentType: "application/octet-stream",
+          headers: { "x-base-length": String(base.byteLength) },
+        },
+      );
+      if (!response.ok) throw await failure(response);
+      const parsed = (await response.json()) as { data: { kind: DiffKind } };
+      return parsed.data.kind;
+    },
+    async convert(bytes, extension) {
+      if (bytes.byteLength > APP_CONFIG.workbooks.maxBytes)
+        throw new AppError("WORKBOOK_TOO_LARGE");
+      const response = await collabRequest(
+        `/internal/workbooks/convert?ext=${encodeURIComponent(extension)}`,
+        { method: "POST", body: new Uint8Array(bytes), contentType: "application/octet-stream" },
+      );
       if (!response.ok) throw await failure(response);
       return new Uint8Array(await response.arrayBuffer());
     },

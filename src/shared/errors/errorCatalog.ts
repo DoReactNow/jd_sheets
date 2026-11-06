@@ -43,6 +43,11 @@ export const ERROR_CATALOG = {
     message:
       "This workbook was changed since you opened it. Reload the latest version or save yours as a copy.",
   },
+  EDITING_ELSEWHERE: {
+    status: 423,
+    message:
+      "You are editing this workbook in another tab. Switch editing to this tab to continue here.",
+  },
   WORKBOOK_LOCKED: {
     status: 423,
     message:
@@ -50,7 +55,8 @@ export const ERROR_CATALOG = {
   },
   COMMENTS_ONLY: {
     status: 403,
-    message: "You can add comments to this workbook, but not change its content.",
+    message:
+      "You can add comments to this workbook, but not change its content or other people's comments.",
   },
   DOWNLOAD_DISABLED: {
     status: 403,

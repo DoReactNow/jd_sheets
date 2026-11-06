@@ -7,8 +7,10 @@ export const GET = route<unknown, undefined, { id: string }>({
   handler: workbooksController.content,
 });
 
+// Commenters save comments only, Editors need the lease, Viewers never save: decided by the
+// service (P2-ROLE-02..05, P2-LEASE-07).
 export const PUT = route<unknown, undefined, { id: string }>({
   access: "authenticated",
-  workbook: { param: "id", capability: "edit" },
+  workbook: { param: "id", capability: "comment" },
   handler: workbooksController.save,
 });

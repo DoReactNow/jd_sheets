@@ -8,15 +8,28 @@ import type { HandlerResult, RawResult, RouteContext } from "@/shared/http/route
 import {
   createWorkbookInput,
   ifMatchSchema,
+  leaseInput,
   listWorkbooksInput,
+  releaseLeaseInput,
+  tabIdSchema,
+  type LeaseInput,
   type CreateWorkbookInput,
   type ListWorkbooksInput,
 } from "./workbooks.schemas";
-import { workbooksService } from "./workbooks.instance";
+import { leaseService, workbooksService } from "./workbooks.instance";
+import type { LeaseState } from "./workbooks.lease";
 import type { SavedVersionDto, WorkbookDto, WorkbookPageDto } from "./workbooks.types";
 
 /** Input schemas the routes declare (routes import only the controller, rule 2). */
-export const workbookSchemas = { create: createWorkbookInput, list: listWorkbooksInput };
+export const workbookSchemas = {
+  create: createWorkbookInput,
+  list: listWorkbooksInput,
+  lease: leaseInput,
+  releaseLease: releaseLeaseInput,
+};
+
+/** The header an editor page sends with each save: its lease id (Decision 52). */
+export const EDITOR_TAB_HEADER = "x-editor-tab";
 
 type Ctx<I = undefined> = RouteContext<I, { id: string }>;
 
@@ -77,13 +90,35 @@ export const workbooksController = {
       "WORKBOOK_TOO_LARGE",
     );
     const autosave = new URL(context.request.url).searchParams.get("autosave") === "1";
+    const tab = context.request.headers.get(EDITOR_TAB_HEADER);
     const saved = await workbooksService().save(
       principal,
+      context.workbookRole!,
       context.params.id,
       base,
       bytes,
       autosave ? "AUTOSAVE" : "SAVE",
+      tab === null ? null : parseInput(tabIdSchema, tab),
     );
     return { data: saved, headers: { etag: `"${saved.versionId}"` } };
+  },
+
+  /** POST /api/workbooks/:id/lease: take, renew or move the edit lease (P2-LEASE-*). */
+  async lease(context: Ctx<LeaseInput>): Promise<HandlerResult<LeaseState>> {
+    return {
+      data: await leaseService().acquire(
+        principalOf(context),
+        context.workbookRole!,
+        context.params.id,
+        context.input.tabId,
+        context.input.takeOver,
+      ),
+    };
+  },
+
+  /** POST /api/workbooks/:id/lease/release: the page is closing (P2-LEASE-04). */
+  async releaseLease(context: Ctx<{ tabId: string }>): Promise<HandlerResult<{ ok: true }>> {
+    await leaseService().release(principalOf(context), context.params.id, context.input.tabId);
+    return { data: { ok: true } };
   },
 };

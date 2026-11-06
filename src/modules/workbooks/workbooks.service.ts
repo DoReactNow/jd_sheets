@@ -10,8 +10,9 @@ import type { WorkbookRole } from "@/shared/rbac/workbookAccess";
 import { workbookVersionKey, WORKBOOKS_PREFIX, type FileStorage } from "@/shared/storage";
 import { toIsoInstant, type Clock } from "@/shared/time";
 import type { WorkbookValidator } from "@/shared/validator";
-import { resolveWorkbookRole } from "@/shared/rbac/workbookAccess";
+import { resolveWorkbookRole, roleAllows } from "@/shared/rbac/workbookAccess";
 import type { CreateWorkbookInput, ListWorkbooksInput } from "./workbooks.schemas";
+import type { LeaseService } from "./workbooks.lease";
 import {
   StaleBaseVersionError,
   type WorkbookRow,
@@ -21,6 +22,7 @@ import type { SavedVersionDto, WorkbookDto, WorkbookPageDto } from "./workbooks.
 
 export interface WorkbooksServiceDeps {
   repository: WorkbooksRepository;
+  lease: LeaseService;
   storage: FileStorage;
   validator: WorkbookValidator;
   clock: Clock;
@@ -69,12 +71,18 @@ function toDto(row: WorkbookRow, role: WorkbookRole): WorkbookDto {
   };
 }
 
+async function readAll(stream: Readable): Promise<Uint8Array> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk as Uint8Array));
+  return new Uint8Array(Buffer.concat(chunks));
+}
+
 function isUniqueViolation(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "P2002";
 }
 
 export function createWorkbooksService(deps: WorkbooksServiceDeps) {
-  const { repository, storage, validator, clock, logger } = deps;
+  const { repository, lease, storage, validator, clock, logger } = deps;
 
   async function storeVersionFile(workbookId: string, bytes: Uint8Array) {
     const versionId = uuid7(clock);
@@ -221,19 +229,48 @@ export function createWorkbooksService(deps: WorkbooksServiceDeps) {
      */
     async save(
       principal: Principal,
+      role: WorkbookRole,
       workbookId: string,
       baseVersionId: string,
       bytes: Uint8Array,
       source: SaveSource,
+      tabId: string | null,
     ): Promise<SavedVersionDto> {
+      // The server is the lock: a Viewer never saves (P2-ROLE-02, P2-MODE-03).
+      if (!roleAllows(role, "comment")) throw new AppError("FORBIDDEN");
       if (bytes.byteLength > APP_CONFIG.workbooks.maxBytes)
         throw new AppError("WORKBOOK_TOO_LARGE");
       const current = await repository.findById(workbookId);
-      if (!current?.currentVersion) throw new AppError("NOT_FOUND");
+      if (!current?.currentVersion || current.trashedAt) throw new AppError("NOT_FOUND");
       // Cheap early answer; the transaction below is what really decides.
       if (current.currentVersion.id !== baseVersionId) throw new AppError("WORKBOOK_CHANGED");
 
-      await validator.validate(bytes);
+      if (roleAllows(role, "edit")) {
+        await lease.assertHolds(principal, workbookId, tabId);
+        await validator.validate(bytes);
+      } else {
+        // A Commenter saves comments only, never while someone is editing (Decision 54).
+        if (await lease.heldByOther(principal, workbookId)) throw new AppError("WORKBOOK_LOCKED");
+        await validator.validate(bytes);
+        const base = await storage.get(current.currentVersion.storageKey);
+        if (!base) throw new AppError("INTERNAL");
+        const kind = await validator.diffKind(
+          await readAll(base.body),
+          bytes,
+          principal.displayName,
+        );
+        if (kind === "NONE") {
+          return {
+            versionId: current.currentVersion.id,
+            number: current.currentVersion.number,
+            sizeBytes: Number(current.currentVersion.sizeBytes),
+            savedAt: toIsoInstant(current.updatedAt),
+          };
+        }
+        if (kind !== "COMMENTS_ONLY") {
+          throw new AppError("COMMENTS_ONLY", { logContext: { workbookId, kind } });
+        }
+      }
       const { versionId, storageKey, stored } = await storeVersionFile(workbookId, bytes);
       const now = clock.now();
       try {

@@ -232,6 +232,78 @@ export const workbooksRepository = {
 
 export type WorkbooksRepository = typeof workbooksRepository;
 
+export interface LeaseRow {
+  userId: string;
+  tabId: string;
+  expiresAt: Date;
+  holderName: string;
+}
+
+/** The edit lease (database_schema.md 3.4, Decision 52). */
+export const leaseRepository = {
+  /**
+   * Takes or renews the lease for this page in one statement, so exactly one of two simultaneous
+   * takers wins (P2-LEASE-06). It succeeds when the lease is free or expired, already this
+   * page's, or (with takeOver) held by the same person in another tab. Answers whether it holds.
+   */
+  async take(input: {
+    workbookId: string;
+    userId: string;
+    sessionId: string;
+    tabId: string;
+    now: Date;
+    expiresAt: Date;
+    takeOver: boolean;
+  }): Promise<boolean> {
+    const rows = await getPrisma().$queryRaw<Array<{ tab_id: string }>>(Prisma.sql`
+      INSERT INTO workbooks_edit_leases
+        (workbook_id, user_id, session_id, tab_id, expires_at, created_at, updated_at)
+      VALUES (${input.workbookId}::uuid, ${input.userId}::uuid, ${input.sessionId}::uuid,
+        ${input.tabId}, ${input.expiresAt}, ${input.now}, ${input.now})
+      ON CONFLICT (workbook_id) DO UPDATE SET
+        user_id = EXCLUDED.user_id, session_id = EXCLUDED.session_id, tab_id = EXCLUDED.tab_id,
+        expires_at = EXCLUDED.expires_at, updated_at = EXCLUDED.updated_at,
+        created_at = CASE WHEN workbooks_edit_leases.tab_id = EXCLUDED.tab_id
+          THEN workbooks_edit_leases.created_at ELSE EXCLUDED.created_at END
+      WHERE workbooks_edit_leases.expires_at <= ${input.now}
+        OR (workbooks_edit_leases.user_id = EXCLUDED.user_id AND workbooks_edit_leases.tab_id = EXCLUDED.tab_id)
+        OR (${input.takeOver} AND workbooks_edit_leases.user_id = EXCLUDED.user_id)
+      RETURNING tab_id`);
+    return rows.length === 1;
+  },
+
+  /** The current, unexpired lease, or null. */
+  async current(workbookId: string, now: Date): Promise<LeaseRow | null> {
+    const row = await getPrisma().editLease.findFirst({
+      where: { workbookId, expiresAt: { gt: now } },
+      select: {
+        userId: true,
+        tabId: true,
+        expiresAt: true,
+        user: { select: { displayName: true } },
+      },
+    });
+    return row
+      ? {
+          userId: row.userId,
+          tabId: row.tabId,
+          expiresAt: row.expiresAt,
+          holderName: row.user.displayName,
+        }
+      : null;
+  },
+
+  /** Ends the lease if this page holds it. */
+  async release(workbookId: string, userId: string, tabId: string): Promise<void> {
+    await getPrisma().editLease.deleteMany({ where: { workbookId, userId, tabId } });
+  },
+
+  /** Ends any lease this person holds on the workbook (they lost edit rights, P2-LEASE-09). */
+  async releaseAllOf(workbookId: string, userId: string): Promise<void> {
+    await getPrisma().editLease.deleteMany({ where: { workbookId, userId } });
+  },
+};
+
 /**
  * Writes other modules make to workbook rows inside their own transaction (the sharing module's
  * company link, download setting and ownership transfer). Only workbook columns.

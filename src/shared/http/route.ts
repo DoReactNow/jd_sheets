@@ -10,6 +10,8 @@ import { AppError } from "@/shared/errors/AppError";
 import { GENERIC_FIELD_MESSAGE } from "@/shared/errors/errorCatalog";
 import { parseInput, toErrorResponse } from "@/shared/errors/toErrorResponse";
 import { logger as rootLogger, type Logger } from "@/shared/logger";
+import { checkNetwork } from "@/shared/http/networkGuard";
+import { readSessionToken } from "@/shared/http/sessionCookie";
 import { checkAccess, requiredPermissions, type Access } from "@/shared/rbac/guard";
 import type { Principal } from "@/shared/rbac/principal";
 import { resolvePrincipal } from "@/shared/rbac/principalResolver";
@@ -63,6 +65,10 @@ export interface RouteOptions<T, I, P> {
   workbook?: WorkbookRequirement<P>;
   /** Validates the JSON body (or the query string for GET, HEAD and DELETE). */
   input?: z.ZodType<I>;
+  /** false only for /api/health, which container health checks call (Decision 46). */
+  network?: boolean;
+  /** true for the routes a person who must change their password may still use. */
+  allowWhilePasswordChangeRequired?: boolean;
   handler: (context: RouteContext<I, P>) => Promise<HandlerResult<T> | RawResult>;
 }
 
@@ -93,11 +99,16 @@ async function readRawInput(request: Request): Promise<unknown> {
   }
 }
 
-/** A browser write must come from the app's own address (cross-site requests are refused). */
+/**
+ * A write must come from the app's own address. With the session cookie, a missing Origin is
+ * refused too (P1-SESS-09); scripts without a cookie may omit it.
+ */
 function assertSameOrigin(request: Request): void {
   if (!WRITE_METHODS.has(request.method)) return;
   const origin = request.headers.get("origin");
-  if (origin !== null && origin !== new URL(getEnv().APP_URL).origin) {
+  const appOrigin = new URL(getEnv().APP_URL).origin;
+  const hasSession = readSessionToken(request.headers) !== null;
+  if ((origin !== null && origin !== appOrigin) || (hasSession && origin === null)) {
     throw new AppError("FORBIDDEN", { logContext: { rule: "cross-site-write" } });
   }
 }
@@ -140,6 +151,14 @@ export function route<T, I = undefined, P extends object = Record<string, string
     const headers = { "x-request-id": requestId, "cache-control": "no-store" };
     try {
       const internal = options.access === "internal";
+      if (!internal && options.network !== false) {
+        const decision = await checkNetwork({
+          headers: request.headers,
+          method: request.method,
+          path: new URL(request.url).pathname,
+        });
+        if (!decision.allowed) throw new AppError("NETWORK_BLOCKED");
+      }
       if (!internal) assertSameOrigin(request);
       const principal = internal ? null : await resolvePrincipal(request);
       const decision = checkAccess(options.access, principal, {
@@ -154,6 +173,10 @@ export function route<T, I = undefined, P extends object = Record<string, string
             principalId: principal?.userId ?? null,
           },
         });
+      }
+
+      if (principal?.mustChangePassword && !options.allowWhilePasswordChangeRequired) {
+        throw new AppError("PASSWORD_CHANGE_REQUIRED");
       }
 
       const params = await context.params;

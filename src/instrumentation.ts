@@ -1,14 +1,13 @@
 // Next.js calls register() once when a server starts: the composition root for request identity,
-// workbook roles and the startup checks.
+// workbook roles, the network rules and the startup checks.
 export async function register(): Promise<void> {
   // NEXT_RUNTIME is set by Next.js itself and is not part of the app's environment schema.
   // eslint-disable-next-line no-restricted-properties
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
   const { getEnv } = await import("@/shared/config/env");
-  let env;
   try {
-    env = getEnv();
+    getEnv();
   } catch {
     return; // no runtime environment (for example during `next build`): nothing to install
   }
@@ -17,18 +16,27 @@ export async function register(): Promise<void> {
   const { getFileStorage } = await import("@/shared/storage");
   getFileStorage();
 
-  // Workbook roles: owner only in Phase 0; the sharing module takes over in Phase 2.
+  // Who is asking: the session cookie (Decision 14).
+  const { configurePrincipalResolver } = await import("@/shared/rbac/principalResolver");
+  const { createSessionPrincipalResolver } = await import("@/modules/identity");
+  configurePrincipalResolver(createSessionPrincipalResolver());
+
+  // Workbook roles: owner only until the sharing module (Phase 2).
   const { configureWorkbookRoleResolver } = await import("@/shared/rbac/workbookAccess");
   const { resolveWorkbookRoleForOwner } = await import("@/modules/workbooks");
   configureWorkbookRoleResolver(resolveWorkbookRoleForOwner);
 
-  // Phase 0 has no sign-in: every request is the development principal (Decision 35). The env
-  // loader already refuses DEV_PRINCIPAL=on in production.
-  if (env.DEV_PRINCIPAL === "on") {
-    const { configurePrincipalResolver } = await import("@/shared/rbac/principalResolver");
-    const { createDevPrincipalResolver } = await import("@/shared/rbac/devPrincipal");
-    configurePrincipalResolver(createDevPrincipalResolver());
-  }
+  // The network rules for every page and API route (Decisions 18, 46).
+  const { configureNetworkGuard } = await import("@/shared/http/networkGuard");
+  const { networkService } = await import("@/modules/network");
+  configureNetworkGuard((request) => networkService.check(request));
+  const { logger } = await import("@/shared/logger");
+  networkService
+    .bootstrap()
+    .then((written) => written > 0 && logger.info("first network rules written", { written }))
+    .catch((error: unknown) =>
+      logger.error("could not write the first network rules", { err: error }),
+    );
 }
 
 /** Errors while rendering a page never pass through route(), so they are logged here. */

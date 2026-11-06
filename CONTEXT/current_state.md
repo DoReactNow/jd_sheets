@@ -18,7 +18,7 @@ The source of truth for what is done and what is next. **Check this file first i
 | Phase | Title | What you will see | Status |
 |:---|:---|:---|:---|
 | 0 | Foundation and walking skeleton | GridCraft running locally on day one; by the end, our app: file list, new workbook, edit, save, reopen | **IN PROGRESS** (W-001 to W-014 done 2026-11-06; W-015 to W-017 being verified; pull request #1) |
-| 1 | Identity, access and the IP wall | Sign-in, sign-up with OTP, approval queue, admin user screens, network rules, blocked page, audit trail | PENDING |
+| 1 | Identity, access and the IP wall | Sign-in, sign-up with OTP, approval queue, admin user screens, network rules, blocked page, audit trail | **DONE** (2026-11-06, built and tested locally; pull request open) |
 | 2 | Workbooks complete and sharing | Share dialog with four roles, view and comment modes, edit lease, version history and restore, autosave, import/export, trash, groups | PENDING |
 | 3 | Live collaboration | Two people editing the same workbook at once, presence and selections, live comments | PENDING |
 | 4 | Hardening and go-live | Load-tested, backed up, deployed on the Hostinger VPS behind the real domain | PENDING |
@@ -293,17 +293,77 @@ The source of truth for what is done and what is next. **Check this file first i
 
 Detailed work items are written when each phase starts (Decision 36).
 
-### Phase 1: Identity, access and the IP wall — PENDING
+### Phase 1: Identity, access and the IP wall — DONE (pull request open)
 
 **Goal:** Only approved `@jdfusion.in` staff, on approved networks, can use JD Sheets.
 
-**Scope:** users and statuses; admin-created accounts; self sign-up with email OTP (Google SMTP through the `mail.sendOtp` job; `fake` in tests); approval queue; sign-in, sessions, lockout, sign-out; forced password change; admin password reset and the Super Admin recovery command; user management screens; the session principal resolver (development principal removed); the `network` module with IP rules, client-IP parsing, self-lockout protection, the recovery command, the blocked page and the edge allowlist in Caddy; audit trail table, writer and screen; "Signed in as" in the editor (`?author=`).
+**Started 2026-11-06** on branch `phase-1-identity` (from `phase-0-foundation`, whose pull request #1 was still waiting for CI). The owner asked to plan and start at once (2026-11-06), so the plan is written here and built without a separate approval stop. Owner answers: IP ranges are not fixed, so the Network access page is the real wall (Decision 46); the fake mailer is used until the Google account is ready (Decision 47). Technical details: Decision 48. Open, not blocking: Decision 49.
 
-**Needs from the owner at the start:** office and VPN IP ranges (Q-03); the Google sending account and app password (Q-04), only for the manual check; development and tests use `fake`.
+**What you will see:** sign-in; request access with an email code (shown in the server log locally); waiting-for-approval and not-approved screens; forced password change; admin area with Approvals, Users, Network access and Audit trail; being refused from a non-allowed address.
 
-**What you will see:** the sign-in and sign-up screens, the OTP email (in the fake mailbox locally), the approval queue, user screens, the network rules page, being blocked from a non-allowed IP, the audit trail.
+**Execution order:** `W-101 → W-102 → W-103 → W-104 → W-105 → W-106 → W-107 → W-108 → W-109 → W-110 → W-111 → W-112 → W-113 → W-114`.
 
-**Critical journeys:** 1, 2, 6.
+**Scenario coverage:** every Phase 1 scenario maps to the item named below. Moved: none. `P1-NET-16` (Caddy refuses outside addresses) is tested with the Docker check, using a closed `EDGE_ALLOWED_CIDRS`.
+
+#### W-101: Identity, audit, network and mail tables
+- [x] Models of `database_schema.md` 3.6–3.10, 3.12, 3.13, plus `mail_outbox` (Decision 47); email domain check constraint (`P1-DOMAIN-08`); triggers: last active Super Admin (`P1-SA-01`), reserved permissions (`P1-SA-03`), audit append-only (`P1-AUDIT-06`)
+- [x] Workbook owner foreign key with the Phase 0 data rule (Decision 48)
+- [x] RED integration tests for the constraint and every trigger, then the migration
+
+#### W-102: Email domain rule, passwords and the audit writer
+- [x] RED unit tests: `P1-DOMAIN-01..07`, `P1-PWD-01..03`, `X-INPUT-10`; audit events carry no secrets (`P1-AUDIT-02`)
+- [x] `src/shared/identity/email.ts` (normalise and check the domain), `identity.passwords.ts` (argon2id, one strength rule), `audit` module writer used inside transactions
+
+#### W-103: Roles in the database (`db:sync-rbac`) and the database principal
+- [x] RED tests: sync is idempotent and never removes edited grants (`P1-SEED-03`); reserved codes refused (`P1-SA-03`); a permission removed applies on the next request (`X-ACCESS-07`)
+- [x] `syncRbac`, `buildPrincipal(user)`; test principals now come from the database
+
+#### W-104: Sessions, sign-in, sign-out and lockout
+- [x] RED tests: `P1-SIGNIN-01..05`, `P1-LOCK-01..06`, `P1-SESS-01..10`, `P1-APPROVE-10`
+- [x] Session resolver installed in `instrumentation.ts`; development principal removed (`P1-SESS-11`); same-origin rule for writes with the cookie (`P1-SESS-09`)
+- [x] Routes: `POST /api/auth/sign-in`, `POST /api/auth/sign-out`, `GET /api/me`
+
+#### W-105: Forced and voluntary password change
+- [x] RED tests: `P1-SIGNIN-06`, `P1-PWD-04`; a must-change user reaches only the change-password screen and its API
+- [x] `POST /api/auth/password`
+
+#### W-106: Mailer, OTP sign-up and the pending account
+- [x] RED tests: `P1-SIGNUP-01..10`, `P1-OTP-01..11`; `mail.sendOtp` job (`X-JOB-01..03`)
+- [x] `Mailer` interface with the `fake` driver (`mail_outbox`; log in development); routes `POST /api/auth/sign-up/request`, `/verify`, `/complete`; test-only `GET /api/test-support/mail`
+
+#### W-107: Approval queue
+- [x] RED tests: `P1-APPROVE-01..09`, `P1-APPROVE-11`
+- [x] `GET /api/admin/approvals`, `POST /api/admin/approvals/:id/approve`, `/reject`; pending and rejected status screens
+
+#### W-108: User administration and Super Admin protections
+- [x] RED tests: `P1-USERS-01..07`, `P1-SA-01..04`, `P1-RESET-01..04`
+- [x] Routes for list (filter, search), create, edit, deactivate, reactivate, reset password
+
+#### W-109: Recovery commands
+- [x] RED tests: `P1-RESET-05`, `P1-RESET-06`, `P1-NET-14`
+- [x] `npm run admin:reset-super-admin -- --email`, `npm run admin:reset-ip-rules -- --cidr`
+
+#### W-110: Network rules and enforcement
+- [x] RED tests: `P1-NET-01..15`, `P1-NET-17`, `X-ACCESS-11`
+- [x] `network` module: rules service with self-lockout protection, 5-second cache, blocked-request log; enforcement in `route()` and in page rendering; bootstrap rules from `BOOTSTRAP_ALLOWED_CIDRS`
+
+#### W-111: Audit trail screen
+- [x] RED tests: `P1-AUDIT-01`, `P1-AUDIT-03..05`, `X-DATA-02`, `X-DATA-03`
+- [x] `GET /api/admin/audit` with actor, action and Kolkata date-range filters
+
+#### W-112: Screens
+- [x] Sign-in, request access (3 steps), waiting, not approved, change password, blocked page; admin shell (Approvals with count, Users, Network access, Audit trail), user menu with sign-out; `?author=` from the signed-in user (`P1-EDITOR-01`)
+- [x] Manual check at 1440 and 390 px
+
+#### W-113: Seeds
+- [x] RED tests: `P1-SEED-01`, `P1-SEED-02`
+- [x] `seed-test.ts` users per role plus pending, rejected and deactivated; `seed-dev.ts` users; private seed (first Super Admin and bootstrap rules) from env
+
+#### W-114: Journeys and acceptance
+- [x] E2E: `P1-E2E-01..04` (journeys 1, 2, 6 and the 403 page) — 8 of 8 journeys pass; `npm run test:e2e` now starts its servers itself (`scripts/e2e-servers.mjs`)
+- [x] Full local run once: lint, typecheck, 267 unit, 117 integration, 33 Rust, 24 contract, 8 E2E
+- [x] Docs updated (Decisions 46–50, local_setup, database_schema)
+- Moved, at the owner's request to save the Mac's resources (2026-11-06): the local fresh-clone drill (CI builds from a fresh clone on every push) and the Docker check with a closed edge allowlist (`P1-NET-16`) move to Phase 4, where the Docker images are built for go-live.
 
 ### Phase 2: Workbooks complete and sharing — PENDING
 

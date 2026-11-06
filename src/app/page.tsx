@@ -1,10 +1,12 @@
 import { WorkbookList } from "@/modules/workbooks/ui/WorkbookList";
+import { requirePageUser } from "@/shared/http/pageAccess";
 import { AppHeader } from "@/shared/ui/AppHeader";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const principal = await requirePageUser("/");
   return (
     <>
-      <AppHeader />
+      <AppHeader principal={principal} />
       <main className="page">
         <WorkbookList />
       </main>

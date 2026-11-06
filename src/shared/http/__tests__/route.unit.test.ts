@@ -5,6 +5,7 @@ import { z } from "zod";
 import { AppError } from "@/shared/errors/AppError";
 import { ERROR_CATALOG } from "@/shared/errors/errorCatalog";
 import { callRoute } from "@/tests/setup/callRoute";
+import { fakePrincipal } from "@/tests/setup/fakePrincipal";
 import type { Principal } from "@/shared/rbac/principal";
 import { configureWorkbookRoleResolver, type WorkbookRole } from "@/shared/rbac/workbookAccess";
 
@@ -21,6 +22,7 @@ beforeEach(() => {
   vi.stubEnv("COLLAB_URL", "http://127.0.0.1:47331");
   vi.stubEnv("COLLAB_TOKEN_SECRET", "test-only-collab-secret-0123456789abcdef");
   vi.stubEnv("INTERNAL_SERVICE_TOKEN", TOKEN);
+  vi.stubEnv("AUTH_SECRET", "test-only-auth-secret-0123456789abcdef0123");
   vi.stubEnv("WORKBOOK_VALIDATOR", "fake");
   vi.stubEnv("STORAGE_DRIVER", "local");
   vi.stubEnv("STORAGE_LOCAL_DIR", "./storage/test");
@@ -39,14 +41,8 @@ async function load() {
   return route;
 }
 
-const member: Principal = {
-  userId: "u-1",
-  displayName: "Member",
-  roleCode: "MEMBER",
-  bypassesAccess: false,
-  permissions: new Set(["workbooks:create"]),
-};
-const superAdmin: Principal = { ...member, roleCode: "SUPER_ADMIN", bypassesAccess: true };
+const member: Principal = fakePrincipal({ role: "MEMBER" });
+const superAdmin: Principal = fakePrincipal({ role: "SUPER_ADMIN" });
 
 describe("route() envelope and errors", () => {
   it("wraps the handler result in { data } with its status and a request ID", async () => {

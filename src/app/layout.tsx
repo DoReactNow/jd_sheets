@@ -1,10 +1,12 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { APP_CONFIG } from "@/shared/config/appConfig";
+import { pageNetworkAllowed } from "@/shared/http/pageAccess";
+import { Blocked } from "@/shared/ui/Blocked";
 import "./globals.css";
 
 // Pages are rendered per request, so each gets its own content-security-policy nonce
-// (src/proxy.ts); a prerendered page could not carry one and its scripts would be blocked.
+// (src/proxy.ts) and its own network check (Decision 46).
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
@@ -17,10 +19,11 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const allowed = await pageNetworkAllowed("page");
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>{allowed ? children : <Blocked />}</body>
     </html>
   );
 }

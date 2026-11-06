@@ -22,8 +22,14 @@ export function instantFromEpochMs(ms: number): Date {
 }
 
 /** An instant plus a fixed length of time, in real elapsed time (not calendar days). */
-export function plusDuration(instant: Date, duration: { hours?: number; days?: number }): Date {
-  const ms = ((duration.days ?? 0) * 24 + (duration.hours ?? 0)) * 3_600_000;
+export function plusDuration(
+  instant: Date,
+  duration: { days?: number; hours?: number; minutes?: number; seconds?: number },
+): Date {
+  const ms =
+    ((duration.days ?? 0) * 24 + (duration.hours ?? 0)) * 3_600_000 +
+    (duration.minutes ?? 0) * 60_000 +
+    (duration.seconds ?? 0) * 1000;
   return instantFromEpochMs(instant.getTime() + ms);
 }
 

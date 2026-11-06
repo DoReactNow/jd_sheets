@@ -36,7 +36,7 @@
     "test:unit:tz": "cross-env TZ=UTC vitest run --project unit src/shared/time && cross-env TZ=America/Los_Angeles vitest run --project unit src/shared/time",
     "test:integration": "npm run db:test:prepare && vitest run --project integration",
     "test:contract": "vitest run --project contract",
-    "test:e2e": "npm run db:test:prepare && playwright test",
+    "test:e2e": "npm run db:test:prepare && node scripts/e2e-servers.mjs start && (playwright test; status=$?; node scripts/e2e-servers.mjs stop; exit $status)",
     "test": "npm run test:unit && npm run test:integration && npm run test:contract",
     "test:watch": "vitest --project unit --project unit-dom",
     "ci:quality": "npm run lint && npm run typecheck && npm run build && npm run build:worker && npm run test:unit && npm run test:integration && npm run test:contract && npm run test:e2e",
@@ -55,9 +55,15 @@
     "contracts:generate": "tsx scripts/generate-contracts.ts && prettier --write contracts",
     "docker:full:up": "docker compose -f docker/docker-compose.local.yml --profile full up -d --build --wait",
     "docker:full:down": "docker compose -f docker/docker-compose.local.yml --profile full down",
-    "docker:check": "node scripts/docker-check.mjs"
+    "docker:check": "node scripts/docker-check.mjs",
+    "db:sync-rbac": "dotenv run -q --override -f .env -- tsx src/modules/identity/identity.cli.ts sync-rbac",
+    "admin:reset-super-admin": "dotenv run -q --override -f .env -- tsx src/modules/identity/identity.cli.ts reset-super-admin",
+    "admin:reset-ip-rules": "dotenv run -q --override -f .env -- tsx src/modules/network/network.cli.ts reset-ip-rules",
+    "db:seed:private": "dotenv run -q --override -f .env -- tsx prisma/seed-private.ts",
+    "worker:test-start": "dotenv run -q -f .env.test -- node dist/worker.js"
   },
   "dependencies": {
+    "@node-rs/argon2": "2.2.2",
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
     "jose": "6.2.15",

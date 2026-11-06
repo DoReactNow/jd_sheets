@@ -56,8 +56,9 @@ enum WorkbookVersionSource {
 model Workbook {
   id               String            @id @default(uuid(7)) @db.Uuid
   title            String            @db.VarChar(200)
-  // Phase 0: no users table yet, so no foreign key (Phase 1 backfills and adds it).
+  // Null only for Phase 0 development workbooks whose owner never existed (Decision 48).
   ownerId          String?           @map("owner_id") @db.Uuid
+  owner            User?             @relation("WorkbookOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   currentVersionId String?           @unique @map("current_version_id") @db.Uuid
   currentVersion   WorkbookVersion?  @relation("CurrentVersion", fields: [currentVersionId], references: [id], onDelete: Restrict)
   sizeBytes        BigInt            @default(0) @map("size_bytes")
@@ -72,22 +73,230 @@ model Workbook {
 
 // Owner: workbooks. One stored file per version; the newest is the workbook's current version.
 model WorkbookVersion {
-  id              String                @id @default(uuid(7)) @db.Uuid
-  workbookId      String                @map("workbook_id") @db.Uuid
-  workbook        Workbook              @relation("Versions", fields: [workbookId], references: [id], onDelete: Cascade)
-  number          Int
-  storageKey      String                @unique @map("storage_key")
-  sizeBytes       BigInt                @map("size_bytes")
-  sha256          String                @db.Char(64)
-  source          WorkbookVersionSource
-  restoredFromId  String?               @map("restored_from_id") @db.Uuid
-  name            String?               @db.VarChar(100)
-  createdById     String?               @map("created_by_id") @db.Uuid
-  contributorIds  String[]              @default([]) @map("contributor_ids") @db.Uuid
-  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
-  currentOf       Workbook?             @relation("CurrentVersion")
+  id             String                @id @default(uuid(7)) @db.Uuid
+  workbookId     String                @map("workbook_id") @db.Uuid
+  workbook       Workbook              @relation("Versions", fields: [workbookId], references: [id], onDelete: Cascade)
+  number         Int
+  storageKey     String                @unique @map("storage_key")
+  sizeBytes      BigInt                @map("size_bytes")
+  sha256         String                @db.Char(64)
+  source         WorkbookVersionSource
+  restoredFromId String?               @map("restored_from_id") @db.Uuid
+  name           String?               @db.VarChar(100)
+  createdById    String?               @map("created_by_id") @db.Uuid
+  contributorIds String[]              @default([]) @map("contributor_ids") @db.Uuid
+  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  currentOf      Workbook?             @relation("CurrentVersion")
 
   @@unique([workbookId, number])
   @@index([workbookId, createdAt(sort: Desc)])
   @@map("workbooks_versions")
+}
+
+// ---------------------------------------------------------------------------
+// identity module (database_schema.md 3.6–3.10)
+// ---------------------------------------------------------------------------
+
+enum UserStatus {
+  PENDING_APPROVAL
+  ACTIVE
+  REJECTED
+  DEACTIVATED
+
+  @@map("user_status")
+}
+
+enum SignupSource {
+  ADMIN
+  SELF
+  SEED
+
+  @@map("signup_source")
+}
+
+enum GrantSource {
+  DEFAULT
+  EDITED
+
+  @@map("grant_source")
+}
+
+// Owner: identity. Emails are lower-case and only @jdfusion.in (check constraint in the migration).
+model User {
+  id                 String       @id @default(uuid(7)) @db.Uuid
+  email              String       @unique
+  displayName        String       @map("display_name") @db.VarChar(100)
+  passwordHash       String       @map("password_hash")
+  status             UserStatus
+  roleId             String?      @map("role_id") @db.Uuid
+  role               Role?        @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  mustChangePassword Boolean      @default(false) @map("must_change_password")
+  failedSignInCount  Int          @default(0) @map("failed_sign_in_count")
+  lockedUntil        DateTime?    @map("locked_until") @db.Timestamptz(3)
+  signupSource       SignupSource @map("signup_source")
+  rejectedBefore     Boolean      @default(false) @map("rejected_before")
+  approvedById       String?      @map("approved_by_id") @db.Uuid
+  rejectedById       String?      @map("rejected_by_id") @db.Uuid
+  approvedAt         DateTime?    @map("approved_at") @db.Timestamptz(3)
+  rejectedAt         DateTime?    @map("rejected_at") @db.Timestamptz(3)
+  deactivatedAt      DateTime?    @map("deactivated_at") @db.Timestamptz(3)
+  lastSignInAt       DateTime?    @map("last_sign_in_at") @db.Timestamptz(3)
+  passwordChangedAt  DateTime?    @map("password_changed_at") @db.Timestamptz(3)
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  sessions           Session[]
+  workbooks          Workbook[]   @relation("WorkbookOwner")
+  auditEvents        AuditEvent[]
+
+  @@index([status, createdAt])
+  @@map("identity_users")
+}
+
+// Owner: identity. Only the SHA-256 hash of the cookie token is stored.
+model Session {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  userId            String    @map("user_id") @db.Uuid
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash         String    @unique @map("token_hash") @db.Char(64)
+  ip                String?   @db.VarChar(45)
+  userAgent         String?   @map("user_agent") @db.VarChar(300)
+  expiresAt         DateTime  @map("expires_at") @db.Timestamptz(3)
+  absoluteExpiresAt DateTime  @map("absolute_expires_at") @db.Timestamptz(3)
+  revokedAt         DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  lastSeenAt        DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(3)
+
+  @@index([userId])
+  @@map("identity_sessions")
+}
+
+// Owner: identity. One row per sign-up code; the code itself is never stored.
+model SignupOtp {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  email           String
+  // Set by the mail.sendOtp job when it makes and sends the code (Decision 48).
+  codeHash        String?   @map("code_hash") @db.Char(64)
+  attempts        Int       @default(0)
+  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(3)
+  consumedAt      DateTime? @map("consumed_at") @db.Timestamptz(3)
+  voidedAt        DateTime? @map("voided_at") @db.Timestamptz(3)
+  requestIp       String?   @map("request_ip") @db.VarChar(45)
+  ticketHash      String?   @unique @map("ticket_hash") @db.Char(64)
+  ticketExpiresAt DateTime? @map("ticket_expires_at") @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([email, createdAt(sort: Desc)])
+  @@map("identity_signup_otps")
+}
+
+// Owner: identity. Fixed-window counters; bucket keys are keyed hashes, never raw emails or IPs.
+model RateLimit {
+  bucket      String
+  windowStart DateTime @map("window_start") @db.Timestamptz(3)
+  count       Int
+
+  @@id([bucket, windowStart])
+  @@map("identity_rate_limits")
+}
+
+// Owner: identity. System roles; defaults applied by db:sync-rbac (Decision 16).
+model Role {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  key            String           @unique
+  name           String           @db.VarChar(60)
+  bypassesAccess Boolean          @default(false) @map("bypasses_access")
+  isSystem       Boolean          @default(true) @map("is_system")
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  permissions    RolePermission[]
+  users          User[]
+
+  @@map("rbac_roles")
+}
+
+// Owner: identity. A reserved code can never be granted (trigger in the migration).
+model RolePermission {
+  roleId     String      @map("role_id") @db.Uuid
+  role       Role        @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission String
+  source     GrantSource @default(DEFAULT)
+
+  @@id([roleId, permission])
+  @@map("rbac_role_permissions")
+}
+
+// ---------------------------------------------------------------------------
+// network module (database_schema.md 3.12)
+// ---------------------------------------------------------------------------
+
+// Owner: network. The app's IP allowlist (Decisions 18, 46).
+model IpRule {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  cidr        String   @unique @db.Inet
+  label       String   @db.VarChar(100)
+  enabled     Boolean  @default(true)
+  createdById String?  @map("created_by_id") @db.Uuid
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@map("network_ip_rules")
+}
+
+// Owner: network. Requests refused by the rules, kept 90 days.
+model BlockedRequest {
+  id        BigInt   @id @default(autoincrement())
+  ip        String   @db.VarChar(45)
+  method    String   @db.VarChar(10)
+  path      String   @db.VarChar(300)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt(sort: Desc)])
+  @@map("network_blocked_requests")
+}
+
+// ---------------------------------------------------------------------------
+// audit module (database_schema.md 3.13)
+// ---------------------------------------------------------------------------
+
+enum AuditActorKind {
+  USER
+  SYSTEM
+  SERVICE
+
+  @@map("audit_actor_kind")
+}
+
+// Owner: audit. Append-only (a trigger refuses UPDATE and DELETE).
+model AuditEvent {
+  id         String         @id @default(uuid(7)) @db.Uuid
+  actorId    String?        @map("actor_id") @db.Uuid
+  actor      User?          @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  actorKind  AuditActorKind @map("actor_kind")
+  action     String
+  targetType String         @map("target_type")
+  targetId   String?        @map("target_id") @db.Uuid
+  ip         String?        @db.VarChar(45)
+  details    Json           @default("{}")
+  createdAt  DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+  @@map("audit_events")
+}
+
+// ---------------------------------------------------------------------------
+// mail (Decision 47): the fake mailer's outbox, shared by the app, the worker and the tests.
+// ---------------------------------------------------------------------------
+
+model MailOutbox {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  to        String
+  subject   String
+  text      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([to, createdAt(sort: Desc)])
+  @@map("mail_outbox")
 }

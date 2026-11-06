@@ -1,4 +1,4 @@
-// P0-ENV-01, P0-ENV-02, P0-ENV-03, P0-ACC-01: the environment loader's refusals.
+// P0-ENV-01, P0-ENV-02, P0-ENV-03: the environment loader's refusals.
 import { readFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { parse } from "dotenv";
@@ -13,7 +13,7 @@ function devSource(overrides: EnvSource = {}): EnvSource {
     APP_URL: "http://127.0.0.1:47320",
     LOG_LEVEL: "debug",
     DATABASE_URL: "postgresql://user:pass@127.0.0.1:47322/jdsheets_dev",
-    DEV_PRINCIPAL: "on",
+    AUTH_SECRET: "dev-only-auth-secret-change-me-0123456789abcdef",
     COLLAB_URL: "http://127.0.0.1:47321",
     COLLAB_TOKEN_SECRET: "dev-only-collab-secret-change-me-0123456789",
     INTERNAL_SERVICE_TOKEN: "dev-only-internal-token-change-me-0123456789",
@@ -30,7 +30,7 @@ function prodSource(overrides: EnvSource = {}): EnvSource {
     APP_URL: "https://sheets.example.com",
     LOG_LEVEL: "info",
     DATABASE_URL: "postgresql://user:pass@db:5432/jdsheets",
-    DEV_PRINCIPAL: "off",
+    AUTH_SECRET: realSecret(),
     NETWORK_ENFORCEMENT: "on",
     TRUSTED_PROXY_HOPS: "1",
     COLLAB_URL: "http://collab:47321",
@@ -73,7 +73,9 @@ describe("parseEnv: required values (P0-ENV-03)", () => {
     expect(() => parseEnv(devSource({ WORKBOOK_VALIDATOR: "maybe" }))).toThrow(
       /WORKBOOK_VALIDATOR/,
     );
-    expect(() => parseEnv(devSource({ DEV_PRINCIPAL: "yes" }))).toThrow(/DEV_PRINCIPAL/);
+    expect(() => parseEnv(devSource({ NETWORK_ENFORCEMENT: "yes" }))).toThrow(
+      /NETWORK_ENFORCEMENT/,
+    );
   });
 
   it("requires STORAGE_LOCAL_DIR for the local driver and the S3 settings for s3", () => {
@@ -111,9 +113,10 @@ describe("parseEnv: production refusals (P0-ENV-02, P0-ACC-01)", () => {
     expect(parseEnv(prodSource()).APP_ENV).toBe("production");
   });
 
-  it("refuses the development principal in production, allows it in development and test", () => {
-    expect(() => parseEnv(prodSource({ DEV_PRINCIPAL: "on" }))).toThrow(/DEV_PRINCIPAL/);
-    expect(parseEnv(devSource({ DEV_PRINCIPAL: "on" })).DEV_PRINCIPAL).toBe("on");
+  it("refuses a development AUTH_SECRET in production", () => {
+    expect(() =>
+      parseEnv(prodSource({ AUTH_SECRET: "dev-only-auth-secret-change-me-0123456789abcdef" })),
+    ).toThrow(/AUTH_SECRET/);
   });
 
   it("refuses network enforcement off in production", () => {

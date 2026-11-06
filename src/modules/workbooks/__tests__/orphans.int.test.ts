@@ -6,8 +6,7 @@ import { getPrisma } from "@/shared/db/prisma";
 import { getFileStorage, workbookVersionKey } from "@/shared/storage";
 import { createTestClock, parseInstant } from "@/shared/time";
 import { createWorkbookValidator, minimalXlsx } from "@/shared/validator";
-import { testPrincipal } from "@/tests/setup/principals";
-import { resetDatabase } from "@/tests/setup/resetDatabase";
+import { createTestUser, resetWithRoles } from "@/tests/setup/users";
 import { resetTestStorage } from "@/tests/setup/testStorage";
 import { workbooksRepository } from "../workbooks.repository";
 import { createWorkbooksService } from "../workbooks.service";
@@ -21,7 +20,6 @@ const service = createWorkbooksService({
   clock,
   logger: quiet,
 });
-const owner = testPrincipal("MEMBER");
 
 const ageFile = (key: string, isoTime: string) => {
   const when = parseInstant(isoTime);
@@ -29,13 +27,14 @@ const ageFile = (key: string, isoTime: string) => {
 };
 
 beforeEach(async () => {
-  await resetDatabase();
+  await resetWithRoles();
   resetTestStorage();
 });
 afterAll(() => getPrisma().$disconnect());
 
 describe("workbooks.purgeOrphanFiles", () => {
   it("deletes old unreferenced files, keeps referenced and recent ones, and is idempotent", async () => {
+    const owner = (await createTestUser()).principal;
     const wb = await service.create(owner, { title: "Kept" });
     const versions = await getPrisma().workbookVersion.findMany();
     const referenced = versions[0].storageKey;

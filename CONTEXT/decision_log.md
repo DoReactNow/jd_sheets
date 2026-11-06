@@ -597,10 +597,10 @@ App lists (approval queue, shared with me) refresh on focus and by light polling
 
 ---
 
-### Decision 40: Open: Office IP Ranges and Google SMTP Account
+### Decision 40: Office IP Ranges and Google SMTP Account
 
 **Date:** 2026-11-06
-**Status:** Open (needed by Phase 1)
+**Status:** Resolved by Decisions 46 and 47 (owner's answers, 2026-11-06)
 - The public IP addresses or ranges of every office and VPN that must reach JD Sheets, and whether they are static. Dynamic home IPs need a VPN.
 - The Google account that sends OTPs (address, and an app password created by the owner). Development and tests never need it.
 
@@ -681,3 +681,85 @@ The pinned release's bridge is simpler than the later `craft-web-host` version t
 
 #### Result
 From a fresh clone of the pull-request branch: lint, typecheck, builds, 232 unit, 50 integration, 33 Rust (including golden workbooks and contracts), 24 TypeScript contract and 4 E2E tests all passed. Docker: all four images build, run as non-root without compilers, and a workbook is created and saved through Caddy (`npm run docker:check`).
+
+---
+
+## H. Phase 1 decisions
+
+### Decision 46: IP Ranges Change, So the App's Network Page Is the Real Wall
+
+**Date:** 2026-11-06
+**Status:** Accepted (owner: "they are not fixed, that's why we need a page for this in the admin portal")
+
+#### Decision
+- The office and VPN addresses are **not fixed**. Allowed ranges are managed on the **Network access** admin page (`network_ip_rules`), not in server files. A change applies within seconds (rules are cached for at most 5 seconds and the cache is cleared on every change).
+- The **edge allowlist in Caddy is optional**: `EDGE_ALLOWED_CIDRS` may stay open (`0.0.0.0/0 ::/0`), so a changed office address never needs a server edit. (Amends Decision 18, layer 1.)
+- **Where the rules apply:** every page (checked when the page is rendered) and every API route (in `route()`), including sign-in and sign-up. Exempt: `/api/health` (container health checks) and the static editor files (they hold no data; every workbook byte goes through the API). A refused page shows "This isn't available from this network"; a refused API call answers `NETWORK_BLOCKED` (403).
+- **Self-lockout:** a change that would exclude the person's own current address is refused, the last enabled rule cannot be removed while enforcement is on, and every change is audited.
+- **When the office address changes and nobody inside can reach the page**, the recovery command on the server adds the new range: `npm run admin:reset-ip-rules -- --cidr <range>`. A "Super Admin may sign in from anywhere" exception is **not** built; it is an Open question for the owner (Decision 49).
+
+---
+
+### Decision 47: Fake Mailer Until the Google Account Is Ready
+
+**Date:** 2026-11-06
+**Status:** Accepted (owner: "use fake mailer for now, we'll add that later")
+
+#### Decision
+- `MAIL_DRIVER=fake` everywhere for now; the `Mailer` interface and the `mail.sendOtp` job are built, and the SMTP driver is added when the owner provides the Google account (before go-live, Phase 4).
+- The fake mailer keeps messages in the database table `mail_outbox` (not in memory), so the app, the worker and the tests see the same messages. In development the codes are also written to the server log, so sign-up can be tried locally. A test-only route reads the latest message for E2E (404 outside `APP_ENV=test`).
+- Production still refuses `fake` (Decision 13), so self sign-up cannot go live without the real account.
+
+---
+
+### Decision 48: Phase 1 Technical Details
+
+**Date:** 2026-11-06
+**Status:** Accepted
+
+#### Decision
+- **One server secret for keyed hashes:** `AUTH_SECRET` (32+ characters) keys the OTP hashes, sign-up tickets and rate-limit buckets (replaces the planned `OTP_PEPPER`).
+- **Sessions** follow Explore Hills Decision 46: SHA-256 hash of a 32-byte token in `identity_sessions`, cookie `jds_session` (`HttpOnly`, `SameSite=Lax`, `Secure` in production), 12 h idle, 7 days absolute, extended at most every 5 minutes.
+- **The development principal is removed.** Development signs in like production; `db:seed:dev` creates development users with known development passwords (refused outside development). E2E signs in through the real form with test users.
+- **Roles in the database:** `rbac_roles` and `rbac_role_permissions`, written by the idempotent `db:sync-rbac` (which never overwrites edited grants); the principal is rebuilt on every request.
+- **Workbook owners:** the owner foreign key to `identity_users` is added now. Workbooks whose owner does not exist (Phase 0 development data) get no owner; Phase 2's administrator tools can assign them.
+- **Audit events** are written in the same transaction as the change they describe; a database trigger refuses updates and deletes.
+- **Mail and OTP jobs** run in the worker; tests run them with `runPendingJobs()`.
+
+---
+
+### Decision 49: Open: Super Admin Access From Outside the Allowed Networks
+
+**Date:** 2026-11-06
+**Status:** Open (not blocking; decide before go-live)
+
+Because office addresses change, a change can leave everyone outside the allowed ranges until someone with server access runs the recovery command. Options: (a) keep it as is (server command only); (b) let **only Super Admins** sign in from anywhere, every such sign-in audited and shown on the Network page; (c) a one-time emergency code sent to the Super Admin's email. The current build is (a).
+
+---
+
+### Decision 50: Phase 1 Details Settled While Building
+
+**Date:** 2026-11-06
+**Status:** Accepted
+
+#### Decision
+- **Job names follow the module:** the code email job is `identity.sendOtp` (not `mail.sendOtp`), because the worker requires `<module>.<job>` names. The job makes the code itself, claims the hash before sending, and unclaims it if the send fails, so a retry sends a fresh code and a repeat sends nothing.
+- **Pending and rejected people get no session.** The right password answers `ACCOUNT_PENDING` or `ACCOUNT_REJECTED`; the sign-in screen shows the status. A wrong password always answers `INVALID_CREDENTIALS`.
+- **Client address:** Next.js fills `X-Forwarded-For` with the socket address only when no proxy set it, so `TRUSTED_PROXY_HOPS=1` is right both locally and behind Caddy. Without a proxy, a caller could send their own header; production always has Caddy in front.
+- **The production first-run seed is committed** (`prisma/seed-private.ts`, `npm run db:seed:private`): it holds no secrets and reads `SEED_SUPER_ADMIN_EMAIL` and `SEED_SUPER_ADMIN_PASSWORD` from the server's env file. (Amends Decision 28's git-ignored file.)
+- **Development users** (`npm run db:seed:dev`): `owner.dev@`, `admin.dev@`, `asha.dev@`, `rahul.dev@` (all `@jdfusion.in`) with the development-only password printed by the seed.
+- **Pages check the network in the root layout** and show the blocked page; pages needing a person redirect to sign-in, and to change-password when required; a page without the permission redirects to the friendly 403 page.
+
+---
+
+### Decision 51: Lighter Local Workflow
+
+**Date:** 2026-11-06
+**Status:** Accepted (owner: the Mac was heating up; asked what can run at intervals)
+
+#### Decision
+- Locally, a work item runs only the tests of the area it changes; the full suite runs **once per phase**, before the pull request. CI runs everything on every push.
+- The **fresh-clone drill runs in CI only** (CI is a fresh clone).
+- **Docker images are built only in Phase 4** (go-live) or in CI, not per phase locally.
+- Rust and editor builds run only when GridCraft or the Rust code changes; background servers are stopped as soon as they are not needed.
+- Progress is shown in the session's task list with a percentage per task.

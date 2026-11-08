@@ -21,10 +21,19 @@ FROM rust:${RUST_VERSION}-bookworm AS rust-build
 # GridCraft has git dependencies (egui, craft-libs); the git CLI is more reliable than cargo's
 # built-in client behind Docker networking.
 ENV CARGO_NET_GIT_FETCH_WITH_CLI=true
+# wasm-opt (binaryen) is pinned to the version the editor is built and tested with. Debian's
+# package (108) is too old for wasm-bindgen's reference tables: the optimised editor then fails
+# at start with "WebAssembly.Table.grow(): failed to grow table".
+ARG BINARYEN_VERSION=133
 RUN rustup target add wasm32-unknown-unknown \
  && apt-get update \
- && apt-get install -y --no-install-recommends nodejs rsync binaryen \
- && rm -rf /var/lib/apt/lists/*
+ && apt-get install -y --no-install-recommends nodejs rsync \
+ && rm -rf /var/lib/apt/lists/* \
+ && arch="$(uname -m)" \
+ && curl -fsSL "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/binaryen-version_${BINARYEN_VERSION}-${arch}-linux.tar.gz" \
+    | tar -xz -C /opt \
+ && ln -s "/opt/binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt" /usr/local/bin/wasm-opt \
+ && wasm-opt --version
 COPY --from=tools /usr/local/cargo/bin/trunk /usr/local/cargo/bin/wasm-bindgen /usr/local/cargo/bin/
 WORKDIR /src
 COPY vendor ./vendor

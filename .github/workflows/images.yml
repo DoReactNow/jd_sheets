@@ -76,6 +76,18 @@ jobs:
         # As root, like on the server; the registry login of this job is passed along.
         run: sudo DOCKER_CONFIG="$HOME/.docker" bash scripts/stack-check.sh "${GITHUB_SHA}"
 
+      - name: Node (for the browser check)
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Editor starts in a real browser (the editor built inside the image)
+        run: |
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+          node scripts/editor-smoke.mjs
+
       - name: Container logs
         if: failure()
         run: docker ps -a; for c in $(docker ps -aq); do echo "== $c"; docker logs --tail 80 "$c" 2>&1; done

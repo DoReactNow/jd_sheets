@@ -44,3 +44,10 @@ The measured results of hardening. **This is a stub**, filled in during Phase 4 
 
 | Date | From office network | From outside | Notes |
 |:---|:---|:---|:---|
+
+## Incidents
+
+| Date | What happened | Cause | Fix and guard |
+|:---|:---|:---|:---|
+| 2026-11-08 | Every sheet stayed on "Loading JD Sheets…" on the live site | The image's editor build used Debian's wasm-opt (binaryen 108), too old for wasm-bindgen's reference tables: the editor failed at start with `WebAssembly.Table.grow(): failed to grow table`. Local and CI test builds used binaryen 133, so every test passed | Dockerfile pins binaryen 133. New CI step `scripts/editor-smoke.mjs` opens the editor from the built image in a real browser and fails unless it starts; checked to fail on the broken build and pass on a good one |
+

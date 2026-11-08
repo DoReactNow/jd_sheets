@@ -11,7 +11,6 @@ import { GENERIC_FIELD_MESSAGE } from "@/shared/errors/errorCatalog";
 import { parseInput, toErrorResponse } from "@/shared/errors/toErrorResponse";
 import { logger as rootLogger, type Logger } from "@/shared/logger";
 import { checkNetwork, recordOutsideAccess } from "@/shared/http/networkGuard";
-import { outsideApiAllowed } from "@/shared/http/outsideAccess";
 import { readSessionToken } from "@/shared/http/sessionCookie";
 import {
   checkAccess,
@@ -162,8 +161,8 @@ export function route<T, I = undefined, P extends object = Record<string, string
     const headers = { "x-request-id": requestId, "cache-control": "no-store" };
     try {
       const internal = options.access === "internal";
-      // Outside the allowed networks only sign-in, and a signed-in Super Admin on the admin panel,
-      // pass (Decisions 57, 64). Sheets never open outside.
+      // Outside the allowed networks only sign-in and a signed-in Super Admin pass (Decisions 57,
+      // 65); everyone else, Admins included, is blocked.
       let outside: { ip: string | null; path: string } | null = null;
       if (!internal && options.network !== false) {
         const path = new URL(request.url).pathname;
@@ -178,11 +177,6 @@ export function route<T, I = undefined, P extends object = Record<string, string
       const principal = internal ? null : await resolvePrincipal(request);
       if (outside && options.network !== "sign-in") {
         if (!mayWorkFromAnyNetwork(principal)) throw new AppError("NETWORK_BLOCKED");
-        if (!outsideApiAllowed(outside.path)) {
-          throw new AppError("NETWORK_BLOCKED", {
-            logContext: { rule: "outside-admin-panel-only", path: outside.path },
-          });
-        }
         await recordOutsideAccess({ userId: principal.userId, ...outside });
       }
       const decision = checkAccess(options.access, principal, {

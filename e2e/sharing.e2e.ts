@@ -11,13 +11,13 @@ const OTHER = "member2.test@jdfusion.in";
 
 async function editorReady(page: Page): Promise<FrameLocator> {
   const frame = page.frameLocator('[data-testid="editor-frame"]');
-  await expect(frame.locator("#gridcraft_canvas")).toBeVisible({ timeout: 60_000 });
-  await expect(frame.locator("#gridcraft_loading")).toBeHidden({ timeout: 60_000 });
+  await expect(frame.locator("#sheets_canvas")).toBeVisible({ timeout: 60_000 });
+  await expect(frame.locator("#sheets_loading")).toBeHidden({ timeout: 60_000 });
   return frame;
 }
 
 async function focusA1(page: Page, frame: FrameLocator) {
-  const box = (await frame.locator("#gridcraft_canvas").boundingBox())!;
+  const box = (await frame.locator("#sheets_canvas").boundingBox())!;
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   await page.keyboard.press("Escape", { delay: 60 });
   await page.keyboard.press("Control+Home", { delay: 60 });

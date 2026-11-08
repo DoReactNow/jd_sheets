@@ -24,8 +24,9 @@ test("each role signs in; pending and rejected people see only their status (jou
 
   await signIn(page, "pending.test@jdfusion.in");
   await expect(page.getByTestId("status-pending")).toBeVisible();
+  // Not signed in: the main address is the sign-in form (Decision 65).
   await page.goto("/");
-  await expect(page).toHaveURL(/\/sign-in/);
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
 
   await signIn(page, "rejected.test@jdfusion.in");
   await expect(page.getByTestId("status-rejected")).toBeVisible();
@@ -80,17 +81,20 @@ test.describe("from another network (journey 6)", () => {
   test.use({ extraHTTPHeaders: { "x-forwarded-for": "198.51.100.7" } });
 
   test("sees the blocked page and cannot call the API", async ({ page, request }) => {
-    // Sign-in itself is open to every network (a Super Admin may sign in from anywhere,
-    // Decisions 57, 64), and the bare address leads there; everything else shows the blocked page.
+    // Sign-in is the main address and opens from every network (Decision 65); everything else
+    // shows the blocked page.
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
     await page.goto("/sign-in");
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
-    await page.goto("/");
-    await expect(page).toHaveURL(/\/sign-in$/);
-    await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
     await page.goto("/admin");
-    await expect(
-      page.getByRole("heading", { name: "This isn't available from this network" }),
-    ).toBeVisible();
+    await expect(page.getByTestId("blocked-page")).toBeVisible();
+    // Signing in from outside as anyone but the Super Admin shows the blocked page, not the list.
+    await page.goto("/");
+    await page.getByLabel("Email").fill("member.test@jdfusion.in");
+    await page.getByLabel("Password").fill(PASSWORD);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page.getByTestId("blocked-page")).toBeVisible();
     const api = await request.post("/api/auth/sign-in", {
       data: { email: "member.test@jdfusion.in", password: PASSWORD },
     });

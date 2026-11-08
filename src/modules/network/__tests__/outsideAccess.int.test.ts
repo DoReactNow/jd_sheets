@@ -1,5 +1,5 @@
-// Decision 64: outside the allowed networks the Super Admin reaches the admin panel only; no one
-// opens sheets; Admins and everyone else are blocked (P4-OUT-01..04).
+// Decisions 64, 65: outside the allowed networks the Super Admin works as usual (admin panel and
+// sheets); Admins and everyone else are blocked (P4-OUT-01..04).
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GET as adminWorkbooksRoute } from "@/app/api/admin/workbooks/route";
 import { GET as approvalsRoute } from "@/app/api/admin/approvals/route";
@@ -13,8 +13,6 @@ import { GET as diagnosticsRoute } from "@/app/api/diagnostics/route";
 import { GET as meRoute } from "@/app/api/me/route";
 import { GET as shareTargetsRoute } from "@/app/api/share-targets/route";
 import { POST as collabTokenRoute } from "@/app/api/workbooks/[id]/collab-token/route";
-import { GET as contentRoute, PUT as saveRoute } from "@/app/api/workbooks/[id]/content/route";
-import { GET as downloadRoute } from "@/app/api/workbooks/[id]/download/route";
 import { POST as leaseRoute } from "@/app/api/workbooks/[id]/lease/route";
 import { GET as workbookRoute } from "@/app/api/workbooks/[id]/route";
 import { GET as versionsRoute } from "@/app/api/workbooks/[id]/versions/route";
@@ -63,7 +61,7 @@ async function signInAt(user: TestUser, ip: string) {
 }
 const code = (r: { body: unknown }) => (r.body as { error?: { code: string } } | null)?.error?.code;
 
-describe("outside the offices (Decision 64)", () => {
+describe("outside the offices (Decisions 64, 65)", () => {
   it("the Super Admin reaches every admin-panel API (P4-OUT-01)", async () => {
     const cookie = await signInAt(superAdmin, OUTSIDE);
     const routes = [
@@ -81,7 +79,7 @@ describe("outside the offices (Decision 64)", () => {
     }
   });
 
-  it("the Super Admin is refused every sheet API (P4-OUT-02)", async () => {
+  it("the Super Admin also opens, saves and shares sheets (P4-OUT-02, Decision 65)", async () => {
     const cookie = await signInAt(superAdmin, OUTSIDE);
     const params = { id: workbookId };
     const base = `/api/workbooks/${workbookId}`;
@@ -95,16 +93,7 @@ describe("outside the offices (Decision 64)", () => {
         body: { title: "From home" },
       }),
       call(workbookRoute, { cookie, ip: OUTSIDE, path: base, params }),
-      call(contentRoute, { cookie, ip: OUTSIDE, path: `${base}/content`, params }),
-      call(saveRoute, {
-        method: "PUT",
-        cookie,
-        ip: OUTSIDE,
-        path: `${base}/content`,
-        params,
-      }),
       call(versionsRoute, { cookie, ip: OUTSIDE, path: `${base}/versions`, params }),
-      call(downloadRoute, { cookie, ip: OUTSIDE, path: `${base}/download`, params }),
       call(leaseRoute, {
         method: "POST",
         cookie,
@@ -124,8 +113,7 @@ describe("outside the offices (Decision 64)", () => {
       call(adminWorkbooksRoute, { cookie, ip: OUTSIDE, path: "/api/admin/workbooks" }),
     ];
     for (const result of await Promise.all(attempts)) {
-      expect(result.status).toBe(403);
-      expect(code(result)).toBe("NETWORK_BLOCKED");
+      expect(code(result)).not.toBe("NETWORK_BLOCKED");
     }
   });
 
@@ -149,7 +137,7 @@ describe("outside the offices (Decision 64)", () => {
     }
   });
 
-  it("a Super Admin outside adds their address, and from then on sheets open there (P4-OUT-04)", async () => {
+  it("a Super Admin outside adds an address, and from then on staff can work there (P4-OUT-04)", async () => {
     const cookie = await signInAt(superAdmin, OUTSIDE);
     const added = await call(addRuleRoute, {
       method: "POST",
@@ -160,7 +148,13 @@ describe("outside the offices (Decision 64)", () => {
     });
     expect(added.status).toBe(201);
     networkService.invalidate();
-    const list = await call(listRoute, { cookie, ip: OUTSIDE, path: "/api/workbooks" });
+    const adminCookie = await signInAt(admin, OUTSIDE);
+    expect(adminCookie).not.toBeNull();
+    const list = await call(listRoute, {
+      cookie: adminCookie,
+      ip: OUTSIDE,
+      path: "/api/workbooks",
+    });
     expect(list.status).toBe(200);
   });
 });

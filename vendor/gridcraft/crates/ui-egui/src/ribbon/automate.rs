@@ -75,22 +75,28 @@ pub(super) fn automate(app: &mut SheetApp, ui: &mut Ui) {
     if __k.clicked() {
         app.open_dialog("commandSearch", json!({}));
     }
-    let __k = big_button(ui, Icon::Script, "Agent\nControl", "How agents drive GridCraft (MCP / control channel)", false);
-    control_keytip(app, ui, &__k, "agents");
-    if __k.clicked() {
-        app.open_dialog("agents", json!({}));
+    // JD Sheets (Decision 65): the web editor has no agent channel or update check.
+    let web = cfg!(target_arch = "wasm32");
+    if !web {
+        let __k = big_button(ui, Icon::Script, "Agent\nControl", "How agents drive JD Sheets (MCP / control channel)", false);
+        control_keytip(app, ui, &__k, "agents");
+        if __k.clicked() {
+            app.open_dialog("agents", json!({}));
+        }
     }
     let __k = big_button(ui, Icon::Script, "Action\nJournal", "Every command run in this session (replayable)", false);
     control_keytip(app, ui, &__k, "journal");
     if __k.clicked() {
         app.open_dialog("journal", json!({}));
     }
-    let __k = big_button(ui, Icon::Script, "Check for\nUpdates…", "Look for a newer GridCraft release", false);
-    control_keytip(app, ui, &__k, "checkForUpdates");
-    if __k.clicked() {
-        app.run_or_alert("app.checkForUpdates", json!({}));
+    if !web {
+        let __k = big_button(ui, Icon::Script, "Check for\nUpdates…", "Look for a newer JD Sheets release", false);
+        control_keytip(app, ui, &__k, "checkForUpdates");
+        if __k.clicked() {
+            app.run_or_alert("app.checkForUpdates", json!({}));
+        }
     }
-    let __k = big_button(ui, Icon::Script, "About\nGridCraft", "Version, contributors and the AI models that helped", false);
+    let __k = big_button(ui, Icon::Script, "About\nJD Sheets", "Version, contributors and the AI models that helped", false);
     control_keytip(app, ui, &__k, "about");
     if __k.clicked() {
         app.open_dialog("about", json!({}));

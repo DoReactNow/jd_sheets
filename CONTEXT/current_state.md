@@ -585,6 +585,12 @@ Detailed work items are written when each phase starts (Decision 36).
 - [x] One list of what is open outside (`src/shared/http/outsideAccess.ts`), used by `route()` and the page layout; `/` goes to sign-in or `/admin`; any `NETWORK_BLOCKED` reloads the page once; the editor checks every 30 seconds
 - [x] Lint, typecheck, unit 335, integration 229, E2E 11 green (2026-11-08)
 
+#### W-414: Sign-in at the main address; the Super Admin everywhere; JD Sheets only (Decision 65)
+- [x] Tests updated first: P4-OUT-02 (the Super Admin opens sheets outside), P4-OUT-04, P4-OUT-05 page rules, journeys sign in at `/`; a non-Super Admin signing in from outside sees the blocked page (journey 6)
+- [x] `/` is the sign-in form until signed in; sign-out returns to `/`; the friendlier blocked page (light, dark, phone checked)
+- [x] "GridCraft" replaced by "JD Sheets" in 168 on-screen strings of our GridCraft (menus, dialogs, messages, reports, saved-file app name), its loading text, title, element IDs and file names; the web editor's About window shows JD Sheets only (no credits or links) and hides "Agent Control" and "Check for Updates". Licence and notice files still ship with the editor files
+- [x] Lint, typecheck, unit 315, integration 229, E2E 11, editor tests 11, GridCraft crate tests 2,400+ green except 2 ui-egui tests that need fonts not installed on this Mac (German ẞ, Vietnamese ẻ; unrelated to the rename)
+
 #### W-412: Runbook, results and owner acceptance (P4-ACCEPT-01)
 - [ ] `runbook.md` and `hardening_results.md` complete, every procedure tried once
 - [ ] Owner walk-through on `https://sheets.jdfusion.in` from the office: sign up with an `@jdfusion.in` address, the code arrives, approve, share, edit live; and a phone on mobile data gets the blocked page (P4-ACCEPT-01)

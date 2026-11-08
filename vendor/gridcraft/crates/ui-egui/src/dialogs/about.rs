@@ -3,6 +3,15 @@ use super::Dialog;
 /// Help ▸ About GridCraft: the app, its contributors and the AI models that helped. The credits
 /// are compiled in (`crate::credits`, docs/contributors.md).
 pub(super) fn about(ui: &mut egui::Ui, d: &mut Dialog) {
+    // JD Sheets (Decision 65): in the web editor the window names only JD Sheets, with no credits,
+    // links or project history. The licence and notice files stay with the editor's files.
+    if cfg!(target_arch = "wasm32") {
+        ui.heading("JD Sheets");
+        ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
+        ui.add_space(4.0);
+        ui.label("The spreadsheet for your team. Questions? Ask your admin.");
+        return;
+    }
     ui.horizontal(|ui| {
         for tab in ["About", "Contributors", "Models"] {
             if ui.selectable_label(d.tab == tab, tab).clicked() {
@@ -15,7 +24,7 @@ pub(super) fn about(ui: &mut egui::Ui, d: &mut Dialog) {
         "Contributors" => crate::credits::contributors_ui(ui),
         "Models" => crate::credits::models_ui(ui),
         _ => {
-            ui.heading("GridCraft");
+            ui.heading("JD Sheets");
             ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
             ui.add_space(4.0);
             ui.label("A clean-room, open-source, Rust-native spreadsheet. Part of ArtCraft.");

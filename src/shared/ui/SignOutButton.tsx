@@ -7,7 +7,7 @@ export function SignOutButton() {
   const router = useRouter();
   async function signOut() {
     await apiRequest("/api/auth/sign-out", { method: "POST", body: {} });
-    router.replace("/sign-in");
+    router.replace("/");
     router.refresh();
   }
   return (

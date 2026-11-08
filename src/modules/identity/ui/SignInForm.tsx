@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { APP_CONFIG } from "@/shared/config/appConfig";
+import { Blocked } from "@/shared/ui/Blocked";
 import { ErrorMessage } from "@/shared/ui/ErrorMessage";
 import styles from "@/shared/ui/forms.module.css";
 import { useApiForm } from "@/shared/ui/useForm";
@@ -12,7 +13,7 @@ import { safeNextPath } from "./safeNextPath";
 export function SignInForm({ next }: { next: string | null }) {
   const router = useRouter();
   const form = useApiForm<{ mustChangePassword: boolean }>("/api/auth/sign-in");
-  const [status, setStatus] = useState<"pending" | "rejected" | null>(null);
+  const [status, setStatus] = useState<"pending" | "rejected" | "blocked" | null>(null);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -25,7 +26,11 @@ export function SignInForm({ next }: { next: string | null }) {
     }
     if (result.error.code === "ACCOUNT_PENDING") setStatus("pending");
     if (result.error.code === "ACCOUNT_REJECTED") setStatus("rejected");
+    // Outside the allowed networks only the Super Admin gets in (Decision 65).
+    if (result.error.code === "NETWORK_BLOCKED") setStatus("blocked");
   }
+
+  if (status === "blocked") return <Blocked />;
 
   if (status) {
     return (

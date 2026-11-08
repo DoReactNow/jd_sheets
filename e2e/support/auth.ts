@@ -6,7 +6,7 @@ config({ path: ".env.test", override: true, quiet: true });
 export const PASSWORD = process.env.TEST_USER_PASSWORD ?? "";
 
 export async function signIn(page: Page, email: string, password = PASSWORD) {
-  await page.goto("/sign-in");
+  await page.goto("/");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();

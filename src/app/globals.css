@@ -131,7 +131,68 @@ button {
   font-size: 22px;
 }
 
+/* The blocked page (Decision 65): friendly, still the product's calm style. */
+.blocked {
+  text-align: left;
+}
+
+.blocked-badge {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 16px;
+}
+
+.blocked-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 28px;
+}
+
+.blocked-pin {
+  position: absolute;
+  right: -10px;
+  bottom: -8px;
+  font-size: 22px;
+}
+
+.blocked-kicker {
+  margin: 0 0 4px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.blocked-steps {
+  margin: 16px 0;
+  padding-left: 18px;
+  line-height: 1.55;
+}
+
+.blocked-steps li + li {
+  margin-top: 8px;
+}
+
+.blocked-footer {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
 @media (max-width: 600px) {
+  .message-page {
+    margin: 8vh 16px 0;
+    padding: 24px;
+  }
+
   .page {
     padding: 16px 12px 48px;
   }

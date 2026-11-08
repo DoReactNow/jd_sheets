@@ -10,9 +10,8 @@ import { checkNetwork, recordOutsideAccess } from "./networkGuard";
 import { outsidePageDecision } from "./outsideAccess";
 
 /**
- * True when this page may be shown: an allowed network, the sign-in page, or a signed-in Super
- * Admin on an admin-panel page (Decisions 57, 64). Outside, `/` goes to sign-in (not signed in)
- * or to `/admin` (Super Admin); sheets are never shown.
+ * True when this page may be shown: an allowed network, the sign-in form (the main address and
+ * /sign-in) to someone not signed in, or a signed-in Super Admin anywhere (Decisions 57, 65).
  */
 export async function pageNetworkAllowed(): Promise<boolean> {
   const all = await headers();
@@ -25,10 +24,7 @@ export async function pageNetworkAllowed(): Promise<boolean> {
     : mayWorkFromAnyNetwork(principal)
       ? "super-admin"
       : "other";
-  const outcome = outsidePageDecision(path, viewer);
-  if (outcome === "sign-in") redirect("/sign-in");
-  if (outcome === "admin-home") redirect("/admin");
-  if (outcome === "blocked") return false;
+  if (outsidePageDecision(path, viewer) === "blocked") return false;
   if (principal && viewer === "super-admin") {
     await recordOutsideAccess({ userId: principal.userId, ip: decision.ip, path });
   }

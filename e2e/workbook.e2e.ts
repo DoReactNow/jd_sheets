@@ -10,9 +10,9 @@ async function waitForEditor(page: Page) {
   // The live service runs in the journeys: the editor is live (Phase 3).
   await expect(page.getByTestId("live-status")).toHaveText("Live", { timeout: 60_000 });
   const frame = page.frameLocator('[data-testid="editor-frame"]');
-  await expect(frame.locator("#gridcraft_canvas")).toBeVisible();
+  await expect(frame.locator("#sheets_canvas")).toBeVisible();
   // GridCraft hides its loading text once the first frame is drawn.
-  await expect(frame.locator("#gridcraft_loading")).toBeHidden({ timeout: 30_000 });
+  await expect(frame.locator("#sheets_loading")).toBeHidden({ timeout: 30_000 });
   return frame;
 }
 
@@ -35,7 +35,7 @@ test("create, type values and a formula, save, reload", async ({ page }) => {
   const frame = await waitForEditor(page);
 
   // Focus the grid and start from A1.
-  const canvas = frame.locator("#gridcraft_canvas");
+  const canvas = frame.locator("#sheets_canvas");
   const box = (await canvas.boundingBox())!;
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
   // The first key after the canvas takes focus can be used to settle it, so harmless keys go

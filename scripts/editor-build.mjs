@@ -8,7 +8,9 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -47,6 +49,18 @@ try {
     console.error("editor build failed: trunk build did not succeed");
     process.exit(result.status ?? 1);
   }
+
+  // 3b. The product is JD Sheets (Decision 65): the files the browser loads carry no other name.
+  //     Contents are unchanged, so trunk's integrity hashes stay valid; only names and the
+  //     references in index.html change.
+  let page = readFileSync(path.join(out, "index.html"), "utf8");
+  for (const file of readdirSync(out)) {
+    const renamed = file.replace(/^gridcraft-web-/, "sheets-").replace(/^gridcraft-/, "sheets-");
+    if (renamed === file) continue;
+    renameSync(path.join(out, file), path.join(out, renamed));
+    page = page.split(`./${file}`).join(`./${renamed}`);
+  }
+  writeFileSync(path.join(out, "index.html"), page);
 
   // 4. Licences travel with the build; build-info.json says exactly what was built (P0-EDIT-03).
   for (const file of ["LICENSE-MIT", "LICENSE-APACHE", "NOTICE"]) {

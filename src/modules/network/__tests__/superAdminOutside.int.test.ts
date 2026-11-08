@@ -1,5 +1,4 @@
-// W-301, Decision 57 (amended by Decision 64): Super Admins may sign in from any network and use the
-// admin panel there; everyone else needs an
+// W-301, Decision 57 (Decisions 64, 65): Super Admins may sign in and work from any network; everyone else needs an
 // allowed network (P3-NETSA-01..04).
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GET as networkRoute } from "@/app/api/admin/network/route";
@@ -38,9 +37,9 @@ describe("Super Admins from any network (Decision 57)", () => {
     expect(signedIn.status).toBe(200);
     const cookie = cookieFrom(signedIn)!;
     expect((await call(meRoute, { cookie, ip: OUTSIDE, path: "/api/me" })).status).toBe(200);
-    // Decision 64: sheets need an allowed network, even for the Super Admin.
+    // Decision 65: the Super Admin works with sheets from anywhere.
     const sheets = await call(workbooksRoute, { cookie, ip: OUTSIDE, path: "/api/workbooks" });
-    expect(code(sheets)).toBe("NETWORK_BLOCKED");
+    expect(sheets.status).toBe(200);
     // Requests are audited at most once per person and address every 10 minutes.
     const events = await getPrisma().auditEvent.findMany({
       where: { action: "network.outsideAccess" },

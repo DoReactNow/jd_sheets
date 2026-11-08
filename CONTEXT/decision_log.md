@@ -1026,7 +1026,7 @@ Because office addresses change, a change can leave everyone outside the allowed
 ### Decision 64: Outside the Offices, the Super Admin Gets the Admin Panel Only; No Sheets for Anyone (amends Decision 57)
 
 **Date:** 2026-11-08
-**Status:** Accepted (owner: "Go Super Admin only … any other else even the admin should be blocked on outside network"; read as: the Super Admin is never locked out of the admin panel, sheets need an allowed network for everyone)
+**Status:** Superseded in part by Decision 65 (the Super Admin works everywhere, sheets too). Still in force: everyone else blocked outside, and the reload when the network changes.
 
 #### Context
 On go-live day the owner, at another location, opened `sheets.jdfusion.in` before signing in and got the blocked page. Signing in at `/sign-in` worked (Decision 57), but nothing pointed there. The owner also wants sheets closed outside the offices for everyone, the Super Admin included.
@@ -1041,3 +1041,19 @@ On go-live day the owner, at another location, opened `sheets.jdfusion.in` befor
 - **Everyone else, Admins included, is fully blocked outside**, as before: sign-in is refused with no session kept, and every page and API answers "not available from this network".
 - **Switching networks with a sheet open:** every request is checked, so the next save, autosave, lease renewal or live-editing token is refused. Live editing drops with the network change, and reconnecting needs a token that is refused outside. The editor page also checks every 30 seconds. Any `NETWORK_BLOCKED` answer reloads the page, which then shows the blocked page instead of the sheet. Changes typed after the switch are not saved.
 - The one list of allowed paths lives in `src/shared/http/outsideAccess.ts` (pages and API), so new routes are blocked outside unless added there.
+
+---
+
+### Decision 65: Sign-In at the Main Address; the Super Admin Works Everywhere; No "GridCraft" in the Product (amends Decision 64)
+
+**Date:** 2026-11-08
+**Status:** Accepted (owner, after seeing the live site; the Super Admin rule chosen as "Everything, sheets too")
+
+#### Decision
+- **Sign-in lives at `https://sheets.jdfusion.in/`** and opens from every network. Not signed in, `/` shows the sign-in form (the address stays `/`). `/sign-in` stays for links to a page (`/sign-in?next=…`). Signing out returns to `/`.
+- **After sign-in, the role decides:**
+  - **Super Admin:** everything from any network: the sheet list, opening and editing sheets, and the admin panel. Outside sign-ins and requests stay audited on the Network access page (Decision 57). This replaces Decision 64's "admin panel only".
+  - **Everyone else, Admins included:** outside an allowed network, sign-in shows the blocked page and keeps no session; an office session used outside gets the blocked page and `NETWORK_BLOCKED` everywhere.
+- **Network switch with a sheet open (non-Super Admin):** kept from Decision 64: the next request is refused, the page reloads to the blocked page, and the editor checks every 30 seconds.
+- **The blocked page** is friendly and a little funny, still professional, with what to do next.
+- **No "GridCraft" anywhere users can see:** the editor's loading text, window title, menus, dialogs, messages and the names of the files it loads say JD Sheets. GridCraft's licence and notice files stay with the editor files, as its licences (MIT or Apache-2.0) require; they are not shown in the product. Internal code names stay as they are.

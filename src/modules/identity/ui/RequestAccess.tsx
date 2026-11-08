@@ -202,7 +202,7 @@ export function RequestAccess() {
           <p className={styles.muted}>
             Thanks. An admin will approve your account soon. Sign in again later.
           </p>
-          <Link className="btn btn-primary" href="/sign-in">
+          <Link className="btn btn-primary" href="/">
             Back to sign in
           </Link>
         </div>
@@ -210,7 +210,7 @@ export function RequestAccess() {
 
       {step !== "done" ? (
         <p className={styles.footer}>
-          Already have an account? <Link href="/sign-in">Sign in</Link>
+          Already have an account? <Link href="/">Sign in</Link>
         </p>
       ) : null}
     </main>

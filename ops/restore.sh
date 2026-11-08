@@ -44,7 +44,11 @@ START=$(date +%s)
 say "Stopping the app"
 compose_for "$TAG" stop caddy app worker collab
 say "Database"
-compose_for "$TAG" exec -T db pg_restore -U jdsheets -d jdsheets --clean --if-exists --no-owner \
+# A fresh, empty database, then the dump: --clean on a live database trips over the job queue's
+# partitioned tables.
+compose_for "$TAG" exec -T db psql -v ON_ERROR_STOP=1 -U jdsheets -d postgres \
+  -c "DROP DATABASE IF EXISTS jdsheets WITH (FORCE)" -c "CREATE DATABASE jdsheets OWNER jdsheets"
+compose_for "$TAG" exec -T db pg_restore -U jdsheets -d jdsheets --no-owner --exit-on-error \
   <"$WORK/database.dump"
 say "Workbook files"
 docker run --rm -i -v "${JD_PROJECT}_workbooks:/data" alpine:3.22 \

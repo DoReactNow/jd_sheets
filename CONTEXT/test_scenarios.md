@@ -569,6 +569,12 @@ These apply to every endpoint, screen, job, table and Rust handler. A plan does 
 - **P4-MAIL-01** The `smtp` mail driver passes the mailer contract suite against a local SMTP test server (never Gmail in tests).
 - **P4-MAIL-02** A wrong app password or an unreachable mail server makes the `identity.sendOtp` job retry and then fail, with log lines that contain no password and no code.
 - **P4-MAIL-03** Production refuses `MAIL_DRIVER=fake` and refuses to start when an SMTP setting is missing.
+- **P4-OUT-01** Outside the allowed networks, a signed-in Super Admin reaches every admin-panel API (approvals, users, network rules including adding one, groups, audit, diagnostics, me) (Decision 64).
+- **P4-OUT-02** Outside, the Super Admin is refused every sheet API with `NETWORK_BLOCKED`: list, create, import, read, content, save, versions, download, sharing, share targets, lease, live-editing token, admin workbook tools.
+- **P4-OUT-03** Outside, an Admin (not Super Admin) is refused sign-in and, with a session from the office, every page and API.
+- **P4-OUT-04** A Super Admin outside adds their own address as a rule; from then on the same address is inside and sheets open.
+- **P4-OUT-05** Pages outside: not signed in, `/` goes to sign-in and other pages show the blocked page; Super Admin: admin pages show, `/` goes to `/admin`, sheet pages and `/admin/workbooks` show the blocked page.
+- **P4-OUT-06** In the browser, any `NETWORK_BLOCKED` answer reloads the page (so the blocked page replaces an open sheet), at most once; the editor checks the network every 30 seconds.
 - **P4-ACCEPT-01** The owner's acceptance walk-through on the real domain from an office network, and a refusal from a non-office network.
 
 ---

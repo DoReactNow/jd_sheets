@@ -1020,3 +1020,24 @@ Because office addresses change, a change can leave everyone outside the allowed
 - **Server-wide security waits until after this project** (owner's choice): SSH password login, root login, and the Hostinger firewall stay as they are for now. They affect every app on the server, not only JD Sheets.
   - JD Sheets itself publishes no ports (Decision 62), so its part of P4-SEC-04 is met. The server-wide part of P4-SEC-04 (SSH keys only, firewall) **moves to a follow-up after go-live**, and `hardening_results.md` records it as an open risk.
   - The snapshot-and-new-tab steps of Decision 62 belonged to that SSH change and move with it. A Hostinger snapshot before the first deploy is still recommended.
+
+---
+
+### Decision 64: Outside the Offices, the Super Admin Gets the Admin Panel Only; No Sheets for Anyone (amends Decision 57)
+
+**Date:** 2026-11-08
+**Status:** Accepted (owner: "Go Super Admin only … any other else even the admin should be blocked on outside network"; read as: the Super Admin is never locked out of the admin panel, sheets need an allowed network for everyone)
+
+#### Context
+On go-live day the owner, at another location, opened `sheets.jdfusion.in` before signing in and got the blocked page. Signing in at `/sign-in` worked (Decision 57), but nothing pointed there. The owner also wants sheets closed outside the offices for everyone, the Super Admin included.
+
+#### Decision
+- **The address works everywhere:** someone not signed in who opens `/` from outside is sent to the sign-in page. Every other page still shows the blocked page to them.
+- **Outside the allowed networks, a signed-in Super Admin reaches the admin panel only:**
+  - pages: `/admin`, `/admin/approvals`, `/admin/users`, `/admin/network`, `/admin/groups`, `/admin/audit`, `/change-password`, `/forbidden`; `/` goes to `/admin`;
+  - API: `/api/admin/approvals`, `/api/admin/users`, `/api/admin/network`, `/api/admin/groups`, `/api/admin/audit`, `/api/auth/*`, `/api/me`, `/api/diagnostics`.
+  - Everything about sheets is refused (`NETWORK_BLOCKED`): the workbook list and pages, content, saving, versions, downloads, import, sharing and share targets, the edit lease, the live-editing token, and the admin workbook tools (`/admin/workbooks`, `/api/admin/workbooks/*`).
+  - Outside sign-ins and requests stay audited and listed on the Network access page (Decision 57).
+- **Everyone else, Admins included, is fully blocked outside**, as before: sign-in is refused with no session kept, and every page and API answers "not available from this network".
+- **Switching networks with a sheet open:** every request is checked, so the next save, autosave, lease renewal or live-editing token is refused. Live editing drops with the network change, and reconnecting needs a token that is refused outside. The editor page also checks every 30 seconds. Any `NETWORK_BLOCKED` answer reloads the page, which then shows the blocked page instead of the sheet. Changes typed after the switch are not saved.
+- The one list of allowed paths lives in `src/shared/http/outsideAccess.ts` (pages and API), so new routes are blocked outside unless added there.

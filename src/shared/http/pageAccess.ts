@@ -7,22 +7,31 @@ import type { PermissionCode } from "@/shared/rbac/permissionRegistry";
 import type { Principal } from "@/shared/rbac/principal";
 import { resolvePrincipal } from "@/shared/rbac/principalResolver";
 import { checkNetwork, recordOutsideAccess } from "./networkGuard";
-
-/** Pages anyone may open from any network: signing in (a Super Admin may work from anywhere). */
-const OPEN_TO_EVERY_NETWORK = new Set(["/sign-in"]);
+import { outsidePageDecision } from "./outsideAccess";
 
 /**
  * True when this page may be shown: an allowed network, the sign-in page, or a signed-in Super
- * Admin from anywhere (Decision 57).
+ * Admin on an admin-panel page (Decisions 57, 64). Outside, `/` goes to sign-in (not signed in)
+ * or to `/admin` (Super Admin); sheets are never shown.
  */
 export async function pageNetworkAllowed(): Promise<boolean> {
   const all = await headers();
   const path = all.get("x-jd-path") ?? "page";
   const decision = await checkNetwork({ headers: all, method: "GET", path });
-  if (decision.allowed || OPEN_TO_EVERY_NETWORK.has(path)) return true;
+  if (decision.allowed) return true;
   const principal = await resolvePrincipal({ headers: all });
-  if (!mayWorkFromAnyNetwork(principal)) return false;
-  await recordOutsideAccess({ userId: principal.userId, ip: decision.ip, path });
+  const viewer = !principal
+    ? "anonymous"
+    : mayWorkFromAnyNetwork(principal)
+      ? "super-admin"
+      : "other";
+  const outcome = outsidePageDecision(path, viewer);
+  if (outcome === "sign-in") redirect("/sign-in");
+  if (outcome === "admin-home") redirect("/admin");
+  if (outcome === "blocked") return false;
+  if (principal && viewer === "super-admin") {
+    await recordOutsideAccess({ userId: principal.userId, ip: decision.ip, path });
+  }
   return true;
 }
 

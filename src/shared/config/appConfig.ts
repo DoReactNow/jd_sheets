@@ -112,6 +112,8 @@ export const APP_CONFIG = deepFreeze({
     /** How long the IP rules are cached in each process (Decision 46). */
     cacheSeconds: 5,
     blockedRequestDays: 90,
+    /** An open sheet checks it is still on an allowed network this often (Decision 64). */
+    editorCheckSeconds: 30,
   },
   ports: {
     app: 47320,

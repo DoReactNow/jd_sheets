@@ -1,6 +1,7 @@
 // The browser's only way to call the backend. Every failure comes back as a FriendlyError.
 import type { ApiSuccess } from "./apiResponse";
 import { toFriendlyError, type FriendlyError } from "./friendlyError";
+import { reactToNetworkBlocked } from "./networkBlocked";
 
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: FriendlyError };
 
@@ -47,8 +48,9 @@ export async function apiRequest<T>(
   }
 
   if (response.ok && isSuccess<T>(body)) return { ok: true, data: body.data };
-  return {
-    ok: false,
-    error: toFriendlyError({ status: response.ok ? 500 : response.status, body }),
-  };
+  const error = toFriendlyError({ status: response.ok ? 500 : response.status, body });
+  // The network changed under an open page: the server shows the blocked page (Decision 64).
+  // Sign-in shows its own message instead.
+  if (!path.startsWith("/api/auth/")) reactToNetworkBlocked(error.code);
+  return { ok: false, error };
 }

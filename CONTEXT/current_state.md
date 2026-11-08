@@ -515,7 +515,7 @@ Detailed work items are written when each phase starts (Decision 36).
 
 **Who does what:** Claude writes and tests everything locally and in CI. The owner runs each server step in Hostinger's browser terminal, guided, and types every secret there (Decision 60). Owner sessions: W-401 (5 minutes, now), W-410 and W-411 (one guided session, about 2 hours), W-412 (acceptance walk-through).
 
-**Execution order:** `W-401 → W-402 → W-403 → W-404 → W-405 → W-406 → W-407 → W-408 → W-409 → W-410 → W-411 → W-412`. W-402 to W-408 are built locally; W-409 needs the server (it runs after the first deploy of W-410 but before staff are invited).
+**Execution order:** `W-401 → W-402 → W-403 → W-404 → W-405 → W-406 → W-407 → W-408 → W-409 → W-410 → W-411 → W-413 → W-412`. W-413 was added on 2026-11-08 (Decision 64), after the first go-live. W-402 to W-408 are built locally; W-409 needs the server (it runs after the first deploy of W-410 but before staff are invited).
 
 **Scenario coverage:** every Phase 4 scenario maps to an item below. New: P4-MAIL-01..03 (the real mailer, Decision 60). Carried from Phase 2: the fresh-clone drill (now CI building the images from a clean checkout, W-404) and P1-NET-16 (Caddy's blocked page with a closed allowlist, checked in CI in W-404; production keeps the allowlist open, Decision 57). Moved out of Phase 4 at the owner's request (Decision 63): the server-wide part of P4-SEC-04 (SSH keys only, Hostinger firewall) goes to a follow-up after go-live; JD Sheets' own part (no published ports) stays.
 
@@ -579,6 +579,11 @@ Detailed work items are written when each phase starts (Decision 36).
 - [ ] `admin:reset-super-admin` and `admin:reset-ip-rules` on the server (P4-DRILL-02)
 - [ ] Restore drill from the Google Drive backup on a fresh machine (the owner's Mac in Docker); time recorded (P4-BACKUP-02)
 - [ ] From outside: JD Sheets answers only through Traefik on 443, internal routes 404 (P4-SEC-03; P4-SEC-04 JD Sheets part)
+
+#### W-413: Outside the offices: the Super Admin gets the admin panel only (Decision 64, P4-OUT-01..06)
+- [x] RED tests: P4-OUT-01..04 (integration, `outsideAccess.int.test.ts`; P3-NETSA-01 updated), P4-OUT-05 (`outsidePageDecision` unit tests), P4-OUT-06 (reloader unit tests); journey 6 updated (`/` leads to sign-in)
+- [x] One list of what is open outside (`src/shared/http/outsideAccess.ts`), used by `route()` and the page layout; `/` goes to sign-in or `/admin`; any `NETWORK_BLOCKED` reloads the page once; the editor checks every 30 seconds
+- [x] Lint, typecheck, unit 335, integration 229, E2E 11 green (2026-11-08)
 
 #### W-412: Runbook, results and owner acceptance (P4-ACCEPT-01)
 - [ ] `runbook.md` and `hardening_results.md` complete, every procedure tried once

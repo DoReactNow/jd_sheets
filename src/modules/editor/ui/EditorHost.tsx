@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { apiRequest } from "@/shared/api/client";
 import { toFriendlyError, type FriendlyError } from "@/shared/api/friendlyError";
+import { reactToNetworkBlocked } from "@/shared/api/networkBlocked";
 import { APP_CONFIG } from "@/shared/config/appConfig";
 import { systemClock } from "@/shared/time";
 import { ErrorMessage } from "@/shared/ui/ErrorMessage";
@@ -107,6 +108,7 @@ async function putWorkbook(
       return { ok: true, versionId: (body as { data: { versionId: string } }).data.versionId };
     }
     const error = toFriendlyError({ status: response.status, body });
+    reactToNetworkBlocked(error.code);
     return {
       ok: false,
       conflict: error.code === "WORKBOOK_CHANGED",
@@ -224,6 +226,15 @@ export function EditorHost({
       cancelled = true;
     };
   }, [workbookId, special, adminTitle]);
+
+  // The network can change under an open sheet (Decision 64): check now and then. A refusal
+  // reloads the page (the API client), which then shows the blocked page instead of the sheet.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      void apiRequest(`/api/workbooks/${workbookId}`);
+    }, APP_CONFIG.network.editorCheckSeconds * 1000);
+    return () => clearInterval(timer);
+  }, [workbookId]);
 
   // An old version, an administrator's open and a trashed workbook are always view only.
   const fixed = info !== null && (special !== null || info.trashedAt !== null);
@@ -372,10 +383,9 @@ export function EditorHost({
           const response = await fetch(contentUrl, { credentials: "same-origin" });
           if (!response.ok) {
             const body: unknown = await response.json().catch(() => undefined);
-            return {
-              ok: false,
-              message: toFriendlyError({ status: response.status, body }).message,
-            };
+            const error = toFriendlyError({ status: response.status, body });
+            reactToNetworkBlocked(error.code);
+            return { ok: false, message: error.message };
           }
           const versionTag = (response.headers.get("etag") ?? "").replace(/"/g, "");
           const bytes = await response.arrayBuffer();

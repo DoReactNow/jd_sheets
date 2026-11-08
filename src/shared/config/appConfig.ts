@@ -22,8 +22,8 @@ export const APP_CONFIG = deepFreeze({
     allowedEmailDomain: "jdfusion.in",
   },
   support: {
-    /** Shown on error pages. Placeholder text until the owner sets a real contact. */
-    contactText: "your JD Fusion admin",
+    /** Shown on error pages: the person who gives access (the owner's office name, 2026-11-08). */
+    contactText: "Adam",
   },
   locale: {
     businessTimezone: "Asia/Kolkata", // IANA name, never a fixed offset (Decision 25)

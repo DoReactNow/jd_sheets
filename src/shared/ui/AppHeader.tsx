@@ -23,11 +23,11 @@ export function AppHeader({ principal }: { principal: Principal }) {
         {isAdmin ? <Link href="/admin">Admin</Link> : null}
       </nav>
       <div className={styles.user}>
-        <span className={styles.name} title={principal.email}>
+        <Link href="/profile" className={styles.name} title={`${principal.email} · your profile`}>
           {principal.displayName}
-        </span>
-        <Link href="/change-password" className={styles.link}>
-          Password
+        </Link>
+        <Link href="/profile" className={styles.link}>
+          Profile
         </Link>
         <SignOutButton />
       </div>

@@ -67,6 +67,9 @@ export const createUserInput = z.object({
     .optional(),
 });
 
+/** Your own name (Decision 66). Anything else in the body is ignored. */
+export const renameMeInput = z.object({ displayName: displayNameSchema });
+
 export const updateUserInput = z
   .object({ displayName: displayNameSchema.optional(), role: roleSchema.optional() })
   .refine((value) => value.displayName !== undefined || value.role !== undefined, {

@@ -1057,3 +1057,19 @@ On go-live day the owner, at another location, opened `sheets.jdfusion.in` befor
 - **Network switch with a sheet open (non-Super Admin):** kept from Decision 64: the next request is refused, the page reloads to the blocked page, and the editor checks every 30 seconds.
 - **The blocked page** is friendly and a little funny, still professional, with what to do next. It names **Adam** (the owner's office name) as the person who adds networks; `APP_CONFIG.support.contactText` holds the name (2026-11-08).
 - **No "GridCraft" anywhere users can see:** the editor's loading text, window title, menus, dialogs, messages and the names of the files it loads say JD Sheets. GridCraft's licence and notice files stay with the editor files, as its licences (MIT or Apache-2.0) require; they are not shown in the product. Internal code names stay as they are.
+
+---
+
+### Decision 66: Names: Everyone Edits Their Own; Admins Rename Users
+
+**Date:** 2026-11-08
+**Status:** Accepted (owner: "The admin should have an option to rename the user … every[one] should have the option to change their name in the profile section")
+
+#### Context
+Names show in live editing (presence), sharing, history and the audit trail. The first Super Admin was seeded as "Owner". Sign-up and "Create user" already ask for a name; the server already lets an admin change a name (`PATCH /api/admin/users/:id`), but no screen offered it.
+
+#### Decision
+- **A Profile page (`/profile`)** for everyone signed in: change your own name; your email and role are shown, not editable; a link to change your password. The name in the top bar opens it. `PATCH /api/me { displayName }` (any signed-in person, only their own name; nothing else can change there). Audited as `user.renamed` with the old and new name.
+- **Rename on the Users page:** a "Rename" button for anyone the person may manage (Admins: not Super Admins; Super Admins: everyone, themselves included), through the existing `PATCH /api/admin/users/:id`, audited as `user.updated`.
+- Same name rules everywhere (1 to 100 characters, no control characters).
+- A new name shows on the next page load; in live editing, on the next token refresh (within 5 minutes) or the next time the sheet is opened.

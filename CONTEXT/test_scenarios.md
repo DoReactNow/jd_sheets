@@ -575,6 +575,9 @@ These apply to every endpoint, screen, job, table and Rust handler. A plan does 
 - **P4-OUT-04** A Super Admin outside adds their own address as a rule; from then on the same address is inside and sheets open.
 - **P4-OUT-05** Pages outside: not signed in, `/` goes to sign-in and other pages show the blocked page; Super Admin: admin pages show, `/` goes to `/admin`, sheet pages and `/admin/workbooks` show the blocked page.
 - **P4-OUT-06** In the browser, any `NETWORK_BLOCKED` answer reloads the page (so the blocked page replaces an open sheet), at most once; the editor checks the network every 30 seconds.
+- **P4-NAME-01** Anyone signed in changes their own name on the Profile page (`PATCH /api/me`); the new name is returned by `/api/me` and audited (`user.renamed`, old and new name).
+- **P4-NAME-02** `PATCH /api/me` refuses an empty, too long or control-character name with the friendly field message, needs a session (401), and never changes the role, email or status.
+- **P4-NAME-03** On the Users page an Admin renames a Member or Admin, cannot rename a Super Admin (403); a Super Admin renames anyone, themselves included.
 - **P4-ACCEPT-01** The owner's acceptance walk-through on the real domain from an office network, and a refusal from a non-office network.
 
 ---

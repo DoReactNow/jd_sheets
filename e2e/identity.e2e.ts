@@ -8,11 +8,11 @@ test("each role signs in; pending and rejected people see only their status (jou
   page,
 }) => {
   await signInAndWait(page, "member.test@jdfusion.in");
-  await expect(page.getByRole("link", { name: "Admin" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Admin", exact: true })).toHaveCount(0);
   await signOut(page);
 
   await signInAndWait(page, "admin.test@jdfusion.in");
-  await page.getByRole("link", { name: "Admin" }).click();
+  await page.getByRole("link", { name: "Admin", exact: true }).click();
   await expect(page.getByRole("link", { name: /Approvals/ })).toBeVisible();
   await expect(page.getByRole("link", { name: "Users" })).toBeVisible();
   await signOut(page);
@@ -101,4 +101,22 @@ test.describe("from another network (journey 6)", () => {
     expect(api.status()).toBe(403);
     expect((await api.json()).error.code).toBe("NETWORK_BLOCKED");
   });
+});
+
+test("everyone changes their own name on the Profile page (P4-NAME-01, Decision 66)", async ({
+  page,
+}) => {
+  await signInAndWait(page, "member.test@jdfusion.in");
+  await page.getByRole("link", { name: "Profile" }).click();
+  await expect(page.getByRole("heading", { name: "Your profile" })).toBeVisible();
+  await page.getByLabel("Name").fill("Ravi Kumar");
+  await page.getByRole("button", { name: "Save name" }).click();
+  await expect(page.getByRole("status")).toContainText("Saved");
+  await expect(page.getByRole("banner").getByRole("link", { name: "Ravi Kumar" })).toBeVisible();
+  // Put the seeded name back for the other journeys.
+  const original = "Test Member";
+  await page.getByLabel("Name").fill(original);
+  await page.getByRole("button", { name: "Save name" }).click();
+  await expect(page.getByRole("banner").getByRole("link", { name: original })).toBeVisible();
+  await signOut(page);
 });

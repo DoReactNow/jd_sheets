@@ -5,7 +5,7 @@ import { apiRequest } from "@/shared/api/client";
 import type { FriendlyError } from "@/shared/api/friendlyError";
 
 /** Submits a JSON form through the API client; keeps the friendly error and per-field messages. */
-export function useApiForm<T>(path: string) {
+export function useApiForm<T>(path: string, method: "POST" | "PATCH" = "POST") {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
 
@@ -14,7 +14,7 @@ export function useApiForm<T>(path: string) {
   ): Promise<{ ok: true; data: T } | { ok: false; error: FriendlyError }> {
     setBusy(true);
     setError(null);
-    const result = await apiRequest<T>(path, { method: "POST", body });
+    const result = await apiRequest<T>(path, { method, body });
     setBusy(false);
     if (!result.ok) setError(result.error);
     return result;

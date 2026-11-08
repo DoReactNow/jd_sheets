@@ -12,6 +12,7 @@ import { enqueueOtpMail } from "./identity.jobs";
 import * as schemas from "./identity.schemas";
 import { createSignupService } from "./identity.signup";
 import { groupsService } from "./identity.groups";
+import { profileService } from "./identity.profile";
 
 export { schemas as identitySchemas };
 
@@ -73,6 +74,23 @@ export const identityController = {
         role: principal.roleCode,
         mustChangePassword: principal.mustChangePassword,
         permissions: principal.bypassesAccess ? ["*"] : [...principal.permissions],
+      },
+    };
+  },
+
+  async renameMe(context: Ctx<z.output<typeof schemas.renameMeInput>>) {
+    const principal = principalOf(context);
+    const { displayName } = await profileService.rename(
+      principal,
+      context.input.displayName,
+      meta(context.request),
+    );
+    return {
+      data: {
+        userId: principal.userId,
+        displayName,
+        email: principal.email,
+        role: principal.roleCode,
       },
     };
   },

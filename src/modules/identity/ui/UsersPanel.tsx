@@ -79,6 +79,12 @@ export function UsersPanel({ me, can }: { me: string; can: Permissions }) {
     if (result.ok) setSecret({ who: user.email, password: result.data.temporaryPassword });
   }
 
+  async function rename(user: AdminUserDto) {
+    const next = window.prompt(`New name for ${user.email}`, user.displayName);
+    if (next === null || next.trim() === user.displayName) return;
+    await act(apiSend(`/api/admin/users/${user.id}`, "PATCH", { displayName: next }));
+  }
+
   const manageable = (user: AdminUserDto) => user.roleKey !== "SUPER_ADMIN" || can.superAdmins;
 
   return (
@@ -230,6 +236,11 @@ export function UsersPanel({ me, can }: { me: string; can: Permissions }) {
                   </td>
                   <td>
                     <div className={styles.row}>
+                      {can.edit && manageable(user) ? (
+                        <button type="button" className="btn" onClick={() => rename(user)}>
+                          Rename
+                        </button>
+                      ) : null}
                       {can.reset && manageable(user) && user.status === "ACTIVE" ? (
                         <button type="button" className="btn" onClick={() => resetPassword(user)}>
                           Reset password

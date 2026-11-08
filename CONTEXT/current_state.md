@@ -591,6 +591,11 @@ Detailed work items are written when each phase starts (Decision 36).
 - [x] "GridCraft" replaced by "JD Sheets" in 168 on-screen strings of our GridCraft (menus, dialogs, messages, reports, saved-file app name), its loading text, title, element IDs and file names; the web editor's About window shows JD Sheets only (no credits or links) and hides "Agent Control" and "Check for Updates". Licence and notice files still ship with the editor files
 - [x] Lint, typecheck, unit 315, integration 229, E2E 11, editor tests 11, GridCraft crate tests 2,400+ green except 2 ui-egui tests that need fonts not installed on this Mac (German ẞ, Vietnamese ẻ; unrelated to the rename)
 
+#### W-415: Names: Profile page and Rename (Decision 66, P4-NAME-01..03)
+- [x] RED tests: `names.int.test.ts` (P4-NAME-01, -02 failed first: no `PATCH /api/me`; -03 passed, the server already renamed); journey "everyone changes their own name on the Profile page"
+- [x] `PATCH /api/me` (own name only, audited `user.renamed` with old and new); `/profile` page; the top bar's name and "Profile" link open it; "Rename" on the Users page for people one may manage
+- [x] Lint, typecheck, unit 315, integration 233, E2E 12 green
+
 #### W-412: Runbook, results and owner acceptance (P4-ACCEPT-01)
 - [ ] `runbook.md` and `hardening_results.md` complete, every procedure tried once
 - [ ] Owner walk-through on `https://sheets.jdfusion.in` from the office: sign up with an `@jdfusion.in` address, the code arrives, approve, share, edit live; and a phone on mobile data gets the blocked page (P4-ACCEPT-01)
